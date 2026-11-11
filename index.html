@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="description" content="Endless Treasury: An interactive, continuous Scripture audio-reading and cross-reference journey through the King James Bible.">
+  <meta name="theme-color" content="#2B6B61">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+  <title>Endless Treasury – Scripture Audio & Cross-References</title>
+
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <!-- Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;1,400&family=Familjen+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="top-title">
+        <h1>Endless Treasury</h1>
+        <p class="sub">Enter a verse or a topic. The Treasury of Scripture Knowledge keeps leading from one verse to the next, reading each aloud.</p>
+      </div>
+      <div class="top-actions">
+        <button id="themeToggle" class="btn icon-btn" type="button" title="Toggle theme (Auto / Light / Dark)" aria-label="Toggle theme">
+          <span id="themeIcon" aria-hidden="true">🌓</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="app">
+      <section class="left">
+        <!-- Input & Topic Search -->
+        <form id="seedForm" class="seed" autocomplete="off">
+          <label class="sr" for="q">Verse or topic</label>
+          <input id="q" type="text" placeholder="John 3:16, Psalm 23, or a topic like forgiveness" spellcheck="false">
+          <button class="btn primary" type="submit">Start</button>
+        </form>
+
+        <!-- Suggested Seeds -->
+        <div class="chips" id="chips">
+          <button class="chip" type="button">Romans 8:28</button>
+          <button class="chip" type="button">Psalm 23</button>
+          <button class="chip" type="button">love</button>
+          <button class="chip" type="button">forgiveness</button>
+          <button class="chip" type="button">rest</button>
+          <button class="chip" type="button">Isaiah 53</button>
+        </div>
+
+        <p class="note" id="seedNote" aria-live="polite"></p>
+
+        <!-- Original Hebrew/Greek Word Study Picker -->
+        <div class="words" id="words" hidden>
+          <h2>Study the original word</h2>
+          <div class="wlist" id="wlist"></div>
+        </div>
+
+        <!-- Listening Stage -->
+        <article class="stage" id="stage">
+          <div class="refrow">
+            <div class="refrow-left">
+              <span class="ref" id="refLabel"></span>
+              <span class="via" id="via"></span>
+            </div>
+            <div class="refrow-right">
+              <button id="copyVerseBtn" class="copy-btn" type="button" title="Copy verse and reference">Copy</button>
+            </div>
+          </div>
+          <blockquote class="verse" id="verseText"></blockquote>
+        </article>
+
+        <!-- Transport Audio Controls -->
+        <div class="transport">
+          <button class="btn primary big" id="play" type="button">Play</button>
+          <button class="btn" id="skip" type="button">Next verse</button>
+          <label class="check"><input type="checkbox" id="sound" checked> Sound</label>
+          <label class="check"><input type="checkbox" id="announce" checked> Say the reference</label>
+          <label class="check" id="shuffleWrap" hidden><input type="checkbox" id="shuffle"> Shuffle</label>
+        </div>
+
+        <!-- Pacing & PageRank Dials -->
+        <div class="dials">
+          <div class="dial">
+            <div class="row"><label for="jump">Jumpiness</label><output id="jumpOut" for="jump"></output></div>
+            <input type="range" id="jump" min="0" max="100" value="55">
+            <div class="hint"><span>Reads on</span><span>Hops every verse</span></div>
+          </div>
+          <div class="dial">
+            <div class="row"><label for="focus">Focus</label><output id="focusOut" for="focus"></output></div>
+            <input type="range" id="focus" min="0" max="100" value="15">
+            <div class="hint"><span>Tight on topic</span><span>Looser</span></div>
+          </div>
+          <div class="dial">
+            <div class="row"><label for="rate">Speed</label><output id="rateOut" for="rate"></output></div>
+            <input type="range" id="rate" min="70" max="140" value="92">
+            <div class="hint"><span>Slower</span><span>Faster</span></div>
+          </div>
+          <div class="dial">
+            <div class="row"><label for="gap">Pause between verses</label><output id="gapOut" for="gap"></output></div>
+            <input type="range" id="gap" min="0" max="3000" step="100" value="700">
+            <div class="hint"><span>Seamless</span><span>Room to think</span></div>
+          </div>
+        </div>
+
+        <!-- Voice Selection -->
+        <div class="voicerow">
+          <label for="voice">Voice</label>
+          <select id="voice"><option value="">Default voice</option></select>
+        </div>
+
+        <!-- Outgoing Cross-References -->
+        <div class="next">
+          <h2 id="nextHead">Where it can go from here</h2>
+          <ul id="nextList"></ul>
+        </div>
+      </section>
+
+      <!-- History Trail -->
+      <aside class="right">
+        <h2>Path so far</h2>
+        <ol class="trail" id="trail"></ol>
+      </aside>
+    </main>
+
+    <footer>
+      Text: King James Version (public domain). Links: the Treasury of Scripture Knowledge (R. A. Torrey, public domain), as scored in the OpenBible.info cross-reference data (CC BY 4.0). Each verse keeps its ten strongest links. Hebrew and Greek word tagging: STEPBible Tagged texts (CC BY 4.0, STEP Bible / Tyndale House). Word definitions: Strong's dictionary via Open Scriptures (CC BY-SA). Where the Hebrew and English verse numbers differ, the English (KJV) number is used. Voice is your browser's built-in text-to-speech.
+    </footer>
+  </div>
+
+  <!-- Cloud AI Speech SDK -->
+  <script src="https://js.puter.com/v2/"></script>
+
+  <!-- Application Scripts -->
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(err => {
+          console.warn('SW registration skipped:', err);
+        });
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "Endless Treasury",
+  "short_name": "Endless Treasury",
+  "description": "Continuous Scripture listening and cross-reference journey through the King James Bible.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#ECEFED",
+  "theme_color": "#2B6B61",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
