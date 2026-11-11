@@ -1,4 +1,4 @@
-# Endless Treasury
+# Endless Treasure
 
 > **Infinite Scripture Audio & Cross-Reference Explorer**
 
