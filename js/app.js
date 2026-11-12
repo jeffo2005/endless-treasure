@@ -597,13 +597,17 @@
     let painted = null;     // step currently on screen
     let timer = 0;
     let warmed = false;
+    let visibilityHandlerAttached = false;
 
     const el = i => {
       let a = els[i];
       if (!a) {
         a = els[i] = new Audio();
         a.playsInline = true;
+        a.webkitPlaysInline = true;
         a.preload = 'auto';
+        // Must be in DOM for iOS background audio to persist
+        document.body.appendChild(a);
       }
       return a;
     };
@@ -699,8 +703,38 @@
         slot = 1 - slot;
         a.onended = next;
         a.onerror = () => speakLocal(it.text, next);
+        a.ontimeupdate = () => {
+          if ('mediaSession' in navigator) {
+            try {
+              navigator.mediaSession.setPositionState({
+                duration: a.duration || 0,
+                playbackRate: a.playbackRate,
+                position: a.currentTime || 0
+              });
+            } catch (e) {}
+          }
+        };
         a.playbackRate = it.kind === 'gap' ? 1 : rate();   // gap stays literal ms
         if (a._u !== it.url) { a._u = it.url; a.src = it.url; }
+
+        // Update MediaSession metadata BEFORE play() so iOS lock screen picks it up
+        if ('mediaSession' in navigator && it.step) {
+          try {
+            navigator.mediaSession.metadata = new MediaMetadata({
+              title: refOf(it.step.i, it.step.n),
+              artist: 'Endless Treasury',
+              album: 'King James Bible',
+              artwork: [{ src: 'icons/icon.svg', sizes: '192x192', type: 'image/svg+xml' }]
+            });
+            // Position state for lock screen scrubber
+            navigator.mediaSession.setPositionState({
+              duration: a.duration || 0,
+              playbackRate: a.playbackRate,
+              position: 0
+            });
+          } catch (e) {}
+        }
+
         a.play().catch(err => {
           if (err && err.name === 'NotAllowedError') { pause(); return; }
           speakLocal(it.text, next);
@@ -722,6 +756,31 @@
       enqueue(step);
       setState('playing');
       playNext(g);
+
+      // Keep audio alive when page visibility changes
+      if (!visibilityHandlerAttached) {
+        visibilityHandlerAttached = true;
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) {
+            // Page going to background - ensure we don't pause
+            // The audio element should keep playing on its own
+          } else {
+            // Page coming to foreground - refresh metadata/position
+            if (live && queue.length) {
+              const playing = els.find(a => !a.paused);
+              if (playing) {
+                try {
+                  navigator.mediaSession.setPositionState({
+                    duration: playing.duration || 0,
+                    playbackRate: playing.playbackRate,
+                    position: playing.currentTime || 0
+                  });
+                } catch (e) {}
+              }
+            }
+          }
+        });
+      }
     }
 
     function stop() {
@@ -834,16 +893,6 @@
     }
     $('verseText').innerHTML = h;
     renderNext();
-
-    if ('mediaSession' in navigator) {
-      try {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: refOf(step.i, step.n),
-          artist: 'Endless Treasury',
-          album: 'King James Bible'
-        });
-      } catch (e) {}
-    }
   }
 
   function i2v(i) {
