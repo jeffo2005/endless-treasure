@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Endless Treasury - Core Application Logic
  *
  * Implements:
@@ -128,7 +128,7 @@
 
   let IDX = null;
   function buildIndex() {
-    const ids = new Map(), names = [], post = [], vstems = new Array(TEXT.length);
+    const ids = new Map(), names = [], post = [], vstems = new Array(TEXT.length), surf = [];
     for (let i = 0; i < TEXT.length; i++) {
       const seen = [];
       for (const t of TEXT[i].toLowerCase().match(/[a-z]+/g) || []) {
@@ -139,11 +139,14 @@
           ids.set(s, id);
           names.push(s);
           post.push([]);
+          surf.push(new Map());
         }
         if (seen.indexOf(id) < 0) {
           seen.push(id);
           post[id].push(i);
         }
+        const m = surf[id];
+        m.set(t, (m.get(t) || 0) + 1);
       }
       vstems[i] = seen;
     }
@@ -151,7 +154,58 @@
     for (let id = 0; id < names.length; id++) {
       idf[id] = Math.log(N / post[id].length);
     }
-    IDX = { ids, names, post, vstems, idf };
+    IDX = { ids, names, post, vstems, idf, surf };
+  }
+
+  function topSurface(id) {
+    const m = IDX.surf[id];
+    if (!m || !m.size) return IDX.names[id];
+    let best = '', bestN = 0;
+    for (const [w, n] of m) {
+      if (n > bestN) { best = w; bestN = n; }
+    }
+    return best;
+  }
+
+  function lcs(a, b) {
+    let best = 0;
+    const dp = new Array(b.length + 1).fill(0);
+    for (let i = 1; i <= a.length; i++) {
+      let prev = 0;
+      for (let j = 1; j <= b.length; j++) {
+        const tmp = dp[j];
+        dp[j] = a[i - 1] === b[j - 1] ? prev + 1 : 0;
+        if (dp[j] > best) best = dp[j];
+        prev = tmp;
+      }
+    }
+    return best;
+  }
+
+  function suggestTerms(q) {
+    if (!IDX) buildIndex();
+    const st = stem(q.toLowerCase().replace(/[^a-z]/g, ''));
+    if (!st) return [];
+    const out = [];
+    for (let id = 0; id < IDX.names.length; id++) {
+      const s = IDX.names[id], df = IDX.post[id].length;
+      if (s.length < 4 || df < 2) continue;
+      const L = lcs(st, s);
+      const cov = L / Math.max(st.length, s.length);
+      const revPref = st.startsWith(s) ? 0.85 : 0;
+      if (L < 4 && !revPref) continue;
+      const score = Math.max(cov, revPref) * (1 + Math.log(df) / 8);
+      out.push({ stem: s, score, df, surface: topSurface(id) });
+    }
+    out.sort((a, b) => b.score - a.score);
+    const seen = new Set(), res = [];
+    for (const x of out) {
+      if (seen.has(x.stem)) continue;
+      seen.add(x.stem);
+      res.push(x.surface + ' · ' + x.df + ' verses');
+      if (res.length === 5) break;
+    }
+    return res;
   }
 
   function searchTopic(q, limit = 40) {
@@ -428,22 +482,10 @@
     return out.sort((a, b) => b.n - a.n).slice(0, 20);
   }
 
-  /* ---------- Audio & Text-to-Speech Engine ---------- */
+  /* ---------- Audio & Speech Engine (Zero-Signup / Background Mobile Audio) ---------- */
   const $ = id => document.getElementById(id);
   const ttsOK = 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined';
   let localVoices = [];
-  let currentAudio = null;
-
-  const CLOUD_VOICES = [
-    { id: 'cloud:openai:onyx', label: 'Onyx (Deep Dramatic Narrator - AI)', provider: 'openai', voice: 'onyx' },
-    { id: 'cloud:openai:fable', label: 'Fable (British Narrative - AI)', provider: 'openai', voice: 'fable' },
-    { id: 'cloud:openai:echo', label: 'Echo (Clear Warm Male - AI)', provider: 'openai', voice: 'echo' },
-    { id: 'cloud:aws:Matthew', label: 'Matthew (Scripture Baritone - AI)', provider: 'aws-polly', voice: 'Matthew', engine: 'neural' },
-    { id: 'cloud:aws:Arthur', label: 'Arthur (British Classic - AI)', provider: 'aws-polly', voice: 'Arthur', engine: 'neural' },
-    { id: 'cloud:aws:Stephen', label: 'Stephen (Expressive Reader - AI)', provider: 'aws-polly', voice: 'Stephen', engine: 'neural' },
-    { id: 'cloud:aws:Ruth', label: 'Ruth (Clear Dignified Female - AI)', provider: 'aws-polly', voice: 'Ruth', engine: 'neural' },
-    { id: 'cloud:openai:alloy', label: 'Alloy (Balanced Neutral - AI)', provider: 'openai', voice: 'alloy' }
-  ];
 
   function store(k, v) {
     try { localStorage.setItem('et_' + k, v); } catch (e) {}
@@ -455,21 +497,19 @@
   function loadVoices() {
     const sel = $('voice');
     if (!sel) return;
-    const saved = load('voice') || 'cloud:openai:onyx';
+    const saved = load('voice') || 'cloud:google';
     sel.innerHTML = '';
 
-    // Realistic Cloud AI Voices (HTML5 <audio> / Background Playback on Mobile)
+    // Public Cloud Audio Stream (Real HTML5 <audio> / Background & Lock-Screen Audio / No Signup)
     const cloudGroup = document.createElement('optgroup');
-    cloudGroup.label = 'Realistic Cloud AI Voices (Background Audio)';
-    CLOUD_VOICES.forEach(cv => {
-      const opt = document.createElement('option');
-      opt.value = cv.id;
-      opt.textContent = cv.label;
-      cloudGroup.appendChild(opt);
-    });
+    cloudGroup.label = 'Cloud Stream (Background & Lock-Screen Audio)';
+    const optCloud = document.createElement('option');
+    optCloud.value = 'cloud:google';
+    optCloud.textContent = 'Google Cloud Audio (No sign-up required)';
+    cloudGroup.appendChild(optCloud);
     sel.appendChild(cloudGroup);
 
-    // Device Local Voices (SpeechSynthesis Fallback)
+    // Device Local Voices (Offline / Native SpeechSynthesis)
     if (ttsOK) {
       localVoices = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
       if (localVoices.length) {
@@ -489,7 +529,7 @@
     if (!match && saved && ttsOK) {
       match = Array.from(sel.options).find(o => o.textContent.includes(saved));
     }
-    sel.value = match ? match.value : 'cloud:openai:onyx';
+    sel.value = match ? match.value : 'cloud:google';
   }
 
   if (ttsOK) {
@@ -497,91 +537,218 @@
   }
   loadVoices();
 
-  function fallbackTTS(said, finish) {
-    if (!ttsOK || !$('sound').checked) {
-      const bodyLen = said.split(/\s+/).length;
-      setTimeout(finish, (1400 + bodyLen * 330) / rate());
-      return;
+  function splitIntoChunks(text, maxLen = 175) {
+    const words = text.split(' ');
+    const chunks = [];
+    let current = [];
+    let curLen = 0;
+    for (const w of words) {
+      if (curLen + w.length + 1 > maxLen && current.length > 0) {
+        chunks.push(current.join(' '));
+        current = [w];
+        curLen = w.length;
+      } else {
+        current.push(w);
+        curLen += w.length + 1;
+      }
     }
-    const u = new SpeechSynthesisUtterance(said);
-    const val = $('voice').value;
-    if (val.startsWith('local:')) {
-      const idx = +val.slice(6);
-      const v = localVoices[idx];
-      if (v) { u.voice = v; u.lang = v.lang; }
-    }
-    u.rate = rate();
-    u.onend = finish;
-    u.onerror = finish;
-    setTimeout(finish, 5000 + said.length * 110 / rate());
-    speechSynthesis.speak(u);
+    if (current.length) chunks.push(current.join(' '));
+    return chunks;
   }
 
   const rate = () => +$('rate').value / 100;
-  const engine = {
-    play(step) {
+  const soundOn = () => $('sound').checked;
+
+  /* ---------- Continuous Audio Pipeline ----------
+   * Two alternating <audio> elements share a single queue. A verse is queued
+   * as 1-3 speech segments, and the pause between verses is a silent segment
+   * inside that same stream, so playback never actually stops. The next verse
+   * is decided and prefetched the moment the current one starts, so the queue
+   * never runs dry - which is what mobile OSes require to keep audio alive
+   * when the page is sent to the background.
+   */
+
+  const silenceCache = new Map();
+  function silenceUrl(ms) {
+    if (silenceCache.has(ms)) return silenceCache.get(ms);
+    const sr = 8000, n = Math.max(1, Math.round(sr * ms / 1000));
+    const buf = new ArrayBuffer(44 + n), v = new DataView(buf);
+    const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+    ws(0, 'RIFF'); v.setUint32(4, 36 + n, true);
+    ws(8, 'WAVE'); ws(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, sr, true); v.setUint32(28, sr, true);
+    v.setUint16(32, 1, true); v.setUint16(34, 8, true);
+    ws(36, 'data'); v.setUint32(40, n, true);
+    new Uint8Array(buf, 44).fill(128);        // 8-bit PCM silence is 128, not 0
+    const url = URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+    silenceCache.set(ms, url);
+    return url;
+  }
+
+  const ttsUrl = q => 'https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=' + encodeURIComponent(q);
+
+  const player = (function () {
+    const els = [null, null];
+    const queue = [];       // items awaiting playback
+    let slot = 0;           // element index for the next segment
+    let gen = 0;            // bumped to cancel in-flight callbacks
+    let live = false;
+    let painted = null;     // step currently on screen
+    let timer = 0;
+    let warmed = false;
+
+    const el = i => {
+      let a = els[i];
+      if (!a) {
+        a = els[i] = new Audio();
+        a.playsInline = true;
+        a.preload = 'auto';
+      }
+      return a;
+    };
+
+    function stepText(step) {
       const verses = [];
       for (let k = 0; k < step.n; k++) verses.push(TEXT[step.i + k]);
-      const body = verses.join(' ');
-      const said = ($('announce').checked ? spokenRef(step.i, step.n) + '. ' : '') + body;
-
-      return new Promise(async resolve => {
-        let done = false;
-        let wd;
-        const finish = () => {
-          if (!done) {
-            done = true;
-            if (wd) clearTimeout(wd);
-            resolve();
-          }
-        };
-
-        if (!$('sound').checked) {
-          wd = setTimeout(finish, (1400 + body.split(/\s+/).length * 330) / rate());
-          return;
-        }
-
-        const voiceVal = $('voice').value;
-        const isCloud = voiceVal.startsWith('cloud:') && typeof puter !== 'undefined' && puter.ai && puter.ai.txt2speech;
-
-        if (isCloud) {
-          const cfg = CLOUD_VOICES.find(v => v.id === voiceVal) || CLOUD_VOICES[0];
-          try {
-            const opts = { provider: cfg.provider, voice: cfg.voice };
-            if (cfg.engine) opts.engine = cfg.engine;
-            const audio = await puter.ai.txt2speech(said, opts);
-            currentAudio = audio;
-            audio.playbackRate = rate();
-            audio.onended = finish;
-            audio.onerror = () => {
-              console.warn('Cloud audio stream error, falling back to local TTS');
-              fallbackTTS(said, finish);
-            };
-            wd = setTimeout(finish, 45000 + said.length * 100);
-            await audio.play();
-            return;
-          } catch (err) {
-            console.warn('Cloud audio generation failed, falling back:', err);
-            fallbackTTS(said, finish);
-            return;
-          }
-        }
-
-        // Default or local fallback
-        fallbackTTS(said, finish);
-      });
-    },
-    stop() {
-      if (currentAudio) {
-        try {
-          currentAudio.pause();
-          currentAudio.currentTime = 0;
-        } catch (e) {}
-        currentAudio = null;
-      }
-      if (ttsOK) speechSynthesis.cancel();
+      return ($('announce').checked ? spokenRef(step.i, step.n) + '. ' : '') + verses.join(' ');
     }
-  };
+
+    function enqueue(step) {
+      if (!step) return;
+      const said = stepText(step);
+      const cloud = $('voice').value === 'cloud:google';
+      if (!soundOn()) {
+        queue.push({ kind: 'tick', ms: (1400 + said.split(/\s+/).length * 330) / rate(), step });
+      } else if (cloud) {
+        for (const c of splitIntoChunks(said)) queue.push({ kind: 'speech', url: ttsUrl(c), text: c, step });
+      } else {
+        queue.push({ kind: 'speech', speak: said, step });
+      }
+      // Gap is queued without a URL and materialised on play, so dragging the
+      // slider takes effect at the very next pause rather than a verse later.
+      const gap = +$('gap').value;
+      if (gap > 0) queue.push({ kind: 'gap', ms: gap });
+    }
+
+    function prefetch() {
+      const next = queue[0];
+      const idle = el(slot);
+      if (!next || !next.url || idle._u === next.url) return;
+      if (!idle.paused) return;   // don't interrupt the one-off warm-up
+      idle._u = next.url;
+      idle.src = next.url;
+    }
+
+    // The first segment runs on element 0 inside the tap that started playback,
+    // so that element is unlocked by the gesture. Element 1 needs its own
+    // gesture-activated play() call, which this provides.
+    function warmOther() {
+      if (warmed) return;
+      warmed = true;
+      const a = el(1);
+      a._u = '';
+      a.src = silenceUrl(150);
+      a.play().catch(() => {});
+    }
+
+    function speakLocal(text, next) {
+      if (!live) return;
+      if (!text) { timer = setTimeout(next, 400); return; }
+      if (!ttsOK) { timer = setTimeout(next, Math.max(400, text.length * 60)); return; }
+      const u = new SpeechSynthesisUtterance(text);
+      const val = $('voice').value;
+      if (val.startsWith('local:')) {
+        const v = localVoices[+val.slice(6)];
+        if (v) { u.voice = v; u.lang = v.lang; }
+      }
+      u.rate = rate();
+      u.onend = next;
+      u.onerror = next;
+      speechSynthesis.speak(u);
+    }
+
+    function playNext(g) {
+      if (!live || g !== gen) return;
+      const it = queue.shift();
+      if (!it) {
+        // Defensive only: the queue is always extended at a verse's first
+        // segment, so this should never fire.
+        if (!live) return;
+        const more = advance();
+        if (more) enqueue(more);
+        if (!queue.length) return;
+        return playNext(g);
+      }
+
+      let done = false;
+      const next = () => { if (done) return; done = true; playNext(g); };
+
+      // Paint and extend the queue exactly when a verse becomes audible, so the
+      // walk state advances at the same relative point it always has.
+      if (it.step && it.step !== painted) {
+        painted = it.step;
+        show(it.step);
+        enqueue(advance());
+      }
+
+      if (it.kind === 'gap' && !it.url) it.url = soundOn() ? silenceUrl(it.ms) : '';
+
+      if (it.url) {
+        const a = el(slot);
+        slot = 1 - slot;
+        a.onended = next;
+        a.onerror = () => speakLocal(it.text, next);
+        a.playbackRate = it.kind === 'gap' ? 1 : rate();   // gap stays literal ms
+        if (a._u !== it.url) { a._u = it.url; a.src = it.url; }
+        a.play().catch(err => {
+          if (err && err.name === 'NotAllowedError') { pause(); return; }
+          speakLocal(it.text, next);
+        });
+        prefetch();
+        return;
+      }
+
+      if (it.speak) { speakLocal(it.speak, next); return; }
+      timer = setTimeout(next, it.ms || 0);
+    }
+
+    function start(step) {
+      stop();
+      live = true;
+      gen++;
+      const g = gen;
+      warmOther();
+      enqueue(step);
+      setState('playing');
+      playNext(g);
+    }
+
+    function stop() {
+      live = false;
+      gen++;
+      if (timer) { clearTimeout(timer); timer = 0; }
+      queue.length = 0;
+      painted = null;
+      if (ttsOK) speechSynthesis.cancel();
+      for (const a of els) {
+        if (!a) continue;
+        a.onended = null;
+        a.onerror = null;
+        try { a.pause(); } catch (e) {}
+        a._u = '';
+      }
+      setState('paused');
+    }
+
+    function setState(s) {
+      if ('mediaSession' in navigator) {
+        try { navigator.mediaSession.playbackState = s; } catch (e) {}
+      }
+    }
+
+    return { start, stop };
+  })();
 
   /* ---------- State & UI Rendering ---------- */
   let cur = { i: 0, n: 1, via: 'seed' }, running = false, token = 0;
@@ -684,18 +851,6 @@
     return i - chapStart[k] + 1;
   }
 
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-  async function loop(my) {
-    while (running && token === my) {
-      show(cur);
-      await engine.play(cur);
-      if (!running || token !== my) return;
-      await sleep(+$('gap').value);
-      if (!running || token !== my) return;
-      cur = advance();
-    }
-  }
-
   function setRunning(on) {
     running = on;
     $('play').textContent = on ? 'Pause' : 'Play';
@@ -703,16 +858,15 @@
 
   function go(step) {
     token++;
-    engine.stop();
     cur = step;
     setRunning(true);
-    loop(token);
+    player.start(step);
   }
 
   function pause() {
     token++;
     setRunning(false);
-    engine.stop();
+    player.stop();
   }
 
   function advance() {
@@ -789,14 +943,24 @@
     }
     const res = searchTopic(q);
     if (!res.ids.length) {
-      note.textContent = 'No verses matched “' + q + '”. The King James wording may differ, so try another word or a reference such as John 3:16.';
+      const sug = suggestTerms(q);
+      if (sug.length) {
+        note.innerHTML = 'No verses matched "' + esc(q) + '". The King James wording may differ.' +
+          '<div class="wlist" style="margin-top:6px">' +
+          sug.map(w => '<button class="wchip" type="button" data-sug="' + esc(w) + '">' + esc(w) + '</button>').join('') +
+          '</div>';
+        return;
+      }
+      note.textContent = 'No verses matched "' + q + '". The King James wording may differ, so try another word or a reference such as John 3:16.';
       return;
     }
     setAnchor(anchorFromTopic(res));
     const s = pickFrom(res.ids.slice(0, 8));
-    note.textContent = 'Staying close to “' + q + '”. Starting at ' + refOf(s) + '.';
-    go({ i: s, n: 1, via: 'seed' });
     renderPicker(q);
+    const step = { i: s, n: 1, via: 'seed' };
+    show(step);
+    cur = step;
+    note.textContent = 'Press ▶ Play or choose a root word below.';
   }
 
   function copyCurrentVerse() {
@@ -879,6 +1043,11 @@
       if (b.dataset.id) startWord(b.dataset.id);
       else start($('words').dataset.q);
     }
+  });
+
+  $('seedNote').addEventListener('click', e => {
+    const b = e.target.closest('.wchip[data-sug]');
+    if (b) start(b.dataset.sug.split(' · ')[0]);
   });
 
   $('shuffle').addEventListener('change', () => {
