@@ -559,6 +559,98 @@
   const rate = () => +$('rate').value / 100;
   const soundOn = () => $('sound').checked;
 
+  /* ---------- Playback diagnostics ---------- */
+  const diagEvents = [];
+  const DIAG_LIMIT = 160;
+
+  function diagEnvironment() {
+    let standalone = false;
+    try {
+      standalone = !!(navigator.standalone || window.matchMedia('(display-mode: standalone)').matches);
+    } catch (e) {}
+    return {
+      userAgent: navigator.userAgent || 'unknown',
+      platform: navigator.platform || 'unknown',
+      standalone,
+      visibility: document.visibilityState || (document.hidden ? 'hidden' : 'visible'),
+      online: navigator.onLine,
+      speechSynthesis: ttsOK,
+      mediaSession: 'mediaSession' in navigator,
+      mediaPlaybackState: navigator.mediaSession?.playbackState || 'unknown',
+      sound: soundOn(),
+      voice: $('voice')?.value || 'default',
+      localVoiceCount: localVoices.length,
+      speed: $('rate')?.value || 'unknown',
+      gapMs: $('gap')?.value || 'unknown',
+      currentReference: $('refLabel')?.textContent || '',
+      playButton: $('play')?.textContent || '',
+      audioElements: Array.from(document.querySelectorAll('audio') || []).map(a => ({
+        paused: a.paused,
+        readyState: a.readyState,
+        networkState: a.networkState,
+        ...sourceInfo(a)
+      }))
+    };
+  }
+
+  function renderDiagnostics() {
+    const log = $('playbackDiagLog');
+    if (!log) return;
+    const environment = JSON.stringify(diagEnvironment(), null, 2);
+    const events = diagEvents.map(x => `${x.time} ${x.name}${x.detail ? ' ' + x.detail : ''}`).join('\n');
+    log.textContent = `Environment:\n${environment}\n\nEvents:\n${events}`;
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function diag(name, details = {}) {
+    let detail = '';
+    try { detail = Object.keys(details).length ? JSON.stringify(details) : ''; }
+    catch (e) { detail = String(details); }
+    const ref = $('refLabel')?.textContent;
+    const entry = {
+      time: new Date().toLocaleTimeString(),
+      name,
+      detail: [ref ? `ref=${ref}` : '', detail].filter(Boolean).join(' ')
+    };
+    diagEvents.push(entry);
+    if (diagEvents.length > DIAG_LIMIT) diagEvents.shift();
+    const status = $('playbackDiagStatus');
+    if (status) status.textContent = `${entry.time} — ${name}${detail ? ': ' + detail : ''}`;
+    renderDiagnostics();
+  }
+
+  function errorInfo(err) {
+    return {
+      name: err?.name || 'Error',
+      message: err?.message || String(err || 'unknown error')
+    };
+  }
+
+  function sourceInfo(a) {
+    const src = a.currentSrc || a.src || '';
+    let origin = 'none';
+    try { origin = new URL(src, location.href).origin; } catch (e) {}
+    return {
+      origin,
+      readyState: a.readyState,
+      networkState: a.networkState,
+      duration: Number.isFinite(a.duration) ? +a.duration.toFixed(2) : String(a.duration),
+      currentTime: Number.isFinite(a.currentTime) ? +a.currentTime.toFixed(2) : String(a.currentTime),
+      mediaError: a.error ? { code: a.error.code, message: a.error.message || '' } : null
+    };
+  }
+
+  diag('app.ready', diagEnvironment());
+  document.addEventListener('visibilitychange', () => {
+    diag('page.visibilitychange', { state: document.visibilityState || (document.hidden ? 'hidden' : 'visible') });
+  });
+  window.addEventListener('pagehide', e => diag('page.pagehide', { persisted: !!e.persisted }));
+  window.addEventListener('pageshow', e => diag('page.pageshow', { persisted: !!e.persisted }));
+  window.addEventListener('online', () => diag('network.online'));
+  window.addEventListener('offline', () => diag('network.offline'));
+  window.addEventListener('error', e => diag('js.error', { message: e.message, line: e.lineno, column: e.colno }));
+  window.addEventListener('unhandledrejection', e => diag('js.unhandledrejection', errorInfo(e.reason)));
+
   /* ---------- Continuous Audio Pipeline ----------
    * Two alternating <audio> elements share a single queue. A verse is queued
    * as 1-3 speech segments, and the pause between verses is a silent segment
@@ -598,16 +690,24 @@
     let timer = 0;
     let warmed = false;
     let visibilityHandlerAttached = false;
+    let diagnosticAudioId = 0;
+    let pendingWatchdog = 0;
 
     const el = i => {
       let a = els[i];
       if (!a) {
         a = els[i] = new Audio();
+        a._diagId = `audio-${++diagnosticAudioId}`;
         a.playsInline = true;
         a.webkitPlaysInline = true;
         a.preload = 'auto';
+        for (const eventName of ['playing', 'waiting', 'stalled', 'ended', 'emptied', 'loadedmetadata', 'pause']) {
+          a.addEventListener(eventName, () => diag(`audio.${eventName}`, { element: a._diagId, ...sourceInfo(a) }));
+        }
+        a.addEventListener('error', () => diag('audio.error-event', { element: a._diagId, ...sourceInfo(a) }));
         // Must be in DOM for iOS background audio to persist
         document.body.appendChild(a);
+        diag('audio.element-created', { element: a._diagId, inDOM: a.isConnected });
       }
       return a;
     };
@@ -618,21 +718,31 @@
       return ($('announce').checked ? spokenRef(step.i, step.n) + '. ' : '') + verses.join(' ');
     }
 
+    function clearPendingWatchdog() {
+      if (pendingWatchdog) { clearTimeout(pendingWatchdog); pendingWatchdog = 0; }
+    }
+
     function enqueue(step) {
       if (!step) return;
       const said = stepText(step);
       const cloud = $('voice').value === 'cloud:google';
+      let segmentCount = 0;
       if (!soundOn()) {
         queue.push({ kind: 'tick', ms: (1400 + said.split(/\s+/).length * 330) / rate(), step });
+        segmentCount = 1;
       } else if (cloud) {
-        for (const c of splitIntoChunks(said)) queue.push({ kind: 'speech', url: ttsUrl(c), text: c, step });
+        const chunks = splitIntoChunks(said);
+        for (const c of chunks) queue.push({ kind: 'speech', url: ttsUrl(c), text: c, step });
+        segmentCount = chunks.length;
       } else {
         queue.push({ kind: 'speech', speak: said, step });
+        segmentCount = 1;
       }
       // Gap is queued without a URL and materialised on play, so dragging the
       // slider takes effect at the very next pause rather than a verse later.
       const gap = +$('gap').value;
       if (gap > 0) queue.push({ kind: 'gap', ms: gap });
+      diag('verse.queued', { ref: refOf(step.i, step.n), voice: cloud ? 'cloud:google' : ($('voice').value || 'default'), segments: segmentCount, gapMs: gap });
     }
 
     function prefetch() {
@@ -653,13 +763,30 @@
       const a = el(1);
       a._u = '';
       a.src = silenceUrl(150);
-      a.play().catch(() => {});
+      diag('audio.warmup-request', { element: a._diagId, ...sourceInfo(a) });
+      try {
+        const result = a.play();
+        if (result && typeof result.then === 'function') {
+          result.then(() => diag('audio.warmup-resolved', { element: a._diagId }))
+            .catch(err => diag('audio.warmup-rejected', { element: a._diagId, ...errorInfo(err), ...sourceInfo(a) }));
+        }
+      } catch (err) {
+        diag('audio.warmup-threw', { element: a._diagId, ...errorInfo(err), ...sourceInfo(a) });
+      }
     }
 
     function speakLocal(text, next) {
       if (!live) return;
-      if (!text) { timer = setTimeout(next, 400); return; }
-      if (!ttsOK) { timer = setTimeout(next, Math.max(400, text.length * 60)); return; }
+      if (!text) {
+        diag('speech.no-text');
+        timer = setTimeout(next, 400);
+        return;
+      }
+      if (!ttsOK) {
+        diag('speech.unavailable-timed-advance', { chars: text.length });
+        timer = setTimeout(next, Math.max(400, text.length * 60));
+        return;
+      }
       const u = new SpeechSynthesisUtterance(text);
       const val = $('voice').value;
       if (val.startsWith('local:')) {
@@ -667,9 +794,26 @@
         if (v) { u.voice = v; u.lang = v.lang; }
       }
       u.rate = rate();
-      u.onend = next;
-      u.onerror = next;
-      speechSynthesis.speak(u);
+      let settled = false;
+      const finish = (eventName, details = {}) => {
+        if (settled) return;
+        settled = true;
+        clearPendingWatchdog();
+        diag(eventName, { chars: text.length, voice: val || 'default', ...details });
+        next();
+      };
+      u.onstart = () => diag('speech.started', { chars: text.length, voice: val || 'default', rate: u.rate });
+      u.onend = () => finish('speech.ended');
+      u.onerror = e => finish('speech.error', { error: e.error || e.name || 'unknown' });
+      pendingWatchdog = setTimeout(() => {
+        if (!settled) diag('speech.no-end-or-error-after-60s', { chars: text.length, voice: val || 'default' });
+      }, 60000);
+      diag('speech.speak-request', { chars: text.length, voice: val || 'default', rate: u.rate });
+      try {
+        speechSynthesis.speak(u);
+      } catch (err) {
+        finish('speech.speak-threw', errorInfo(err));
+      }
     }
 
     function playNext(g) {
@@ -686,7 +830,12 @@
       }
 
       let done = false;
-      const next = () => { if (done) return; done = true; playNext(g); };
+      const next = () => {
+        if (done) return;
+        done = true;
+        clearPendingWatchdog();
+        playNext(g);
+      };
 
       // Paint and extend the queue exactly when a verse becomes audible, so the
       // walk state advances at the same relative point it always has.
@@ -701,8 +850,15 @@
       if (it.url) {
         const a = el(slot);
         slot = 1 - slot;
-        a.onended = next;
-        a.onerror = () => speakLocal(it.text, next);
+        a.onended = () => {
+          diag('audio.ended-handler', { element: a._diagId, kind: it.kind, ...sourceInfo(a) });
+          next();
+        };
+        a.onerror = () => {
+          clearPendingWatchdog();
+          diag('audio.onerror-handler-fallback', { element: a._diagId, kind: it.kind, ...sourceInfo(a) });
+          speakLocal(it.text, next);
+        };
         a.ontimeupdate = () => {
           if ('mediaSession' in navigator) {
             try {
@@ -717,6 +873,10 @@
         a.playbackRate = it.kind === 'gap' ? 1 : rate();   // gap stays literal ms
         if (a._u !== it.url) { a._u = it.url; a.src = it.url; }
 
+        diag('audio.play-request', { element: a._diagId, kind: it.kind, ...sourceInfo(a) });
+        pendingWatchdog = setTimeout(() => {
+          if (!done) diag('audio.no-ended-or-error-after-60s', { element: a._diagId, kind: it.kind, ...sourceInfo(a) });
+        }, 60000);
         // Update MediaSession metadata BEFORE play() so iOS lock screen picks it up
         if ('mediaSession' in navigator && it.step) {
           try {
@@ -735,16 +895,36 @@
           } catch (e) {}
         }
 
-        a.play().catch(err => {
+        try {
+          const playResult = a.play();
+          if (playResult && typeof playResult.then === 'function') {
+            playResult.then(() => {
+              diag('audio.play-resolved', { element: a._diagId, kind: it.kind });
+            }).catch(err => {
+              clearPendingWatchdog();
+              diag('audio.play-rejected', { element: a._diagId, kind: it.kind, ...errorInfo(err), ...sourceInfo(a) });
+              if (err && err.name === 'NotAllowedError') { pause(); return; }
+              speakLocal(it.text, next);
+            });
+          } else {
+            diag('audio.play-no-promise', { element: a._diagId, kind: it.kind });
+          }
+        } catch (err) {
+          clearPendingWatchdog();
+          diag('audio.play-threw', { element: a._diagId, kind: it.kind, ...errorInfo(err), ...sourceInfo(a) });
           if (err && err.name === 'NotAllowedError') { pause(); return; }
           speakLocal(it.text, next);
-        });
+        }
         prefetch();
         return;
       }
 
       if (it.speak) { speakLocal(it.speak, next); return; }
-      timer = setTimeout(next, it.ms || 0);
+      diag('playback.timer-segment', { kind: it.kind, durationMs: it.ms });
+      timer = setTimeout(() => {
+        diag('playback.timer-complete', { kind: it.kind });
+        next();
+      }, it.ms || 0);
     }
 
     function start(step) {
@@ -752,6 +932,7 @@
       live = true;
       gen++;
       const g = gen;
+      diag('player.start', { ref: refOf(step.i, step.n), voice: $('voice').value || 'default', sound: soundOn() });
       warmOther();
       enqueue(step);
       setState('playing');
@@ -787,6 +968,7 @@
       live = false;
       gen++;
       if (timer) { clearTimeout(timer); timer = 0; }
+      clearPendingWatchdog();
       queue.length = 0;
       painted = null;
       if (ttsOK) speechSynthesis.cancel();
@@ -797,6 +979,7 @@
         try { a.pause(); } catch (e) {}
         a._u = '';
       }
+      diag('player.stopped');
       setState('paused');
     }
 
@@ -806,7 +989,25 @@
       }
     }
 
-    return { start, stop, unlock: () => { el(0).play().catch(() => {}); el(1).play().catch(() => {}); } };
+    function unlock() {
+      for (const i of [0, 1]) {
+        const a = el(i);
+        diag('audio.unlock-request', { element: a._diagId, ...sourceInfo(a) });
+        try {
+          const result = a.play();
+          if (result && typeof result.then === 'function') {
+            result.then(() => diag('audio.unlock-resolved', { element: a._diagId }))
+              .catch(err => diag('audio.unlock-rejected', { element: a._diagId, ...errorInfo(err), ...sourceInfo(a) }));
+          } else {
+            diag('audio.unlock-no-promise', { element: a._diagId });
+          }
+        } catch (err) {
+          diag('audio.unlock-threw', { element: a._diagId, ...errorInfo(err), ...sourceInfo(a) });
+        }
+      }
+    }
+
+    return { start, stop, unlock };
   })();
 
   /* ---------- State & UI Rendering ---------- */
@@ -1067,6 +1268,21 @@
   $('play').addEventListener('click', () => {
     if (running) pause();
     else { player.unlock(); go(cur); }
+  });
+
+  $('copyPlaybackDiagnostics').addEventListener('click', async () => {
+    const report = [
+      'Endless Treasury playback diagnostics',
+      JSON.stringify(diagEnvironment(), null, 2),
+      ...diagEvents.map(x => `${x.time} ${x.name}${x.detail ? ' ' + x.detail : ''}`)
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(report);
+      $('playbackDiagStatus').textContent = 'Diagnostic report copied. Paste it into your message.';
+    } catch (err) {
+      $('playbackDiagStatus').textContent = 'Copy was blocked by the browser. Open this panel and select/copy the log manually.';
+      diag('diagnostics.copy-failed', errorInfo(err));
+    }
   });
 
   $('skip').addEventListener('click', () => {

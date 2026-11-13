@@ -116,6 +116,15 @@
           <select id="voice"><option value="">Default voice</option></select>
         </div>
 
+        <details class="playback-diagnostics" id="playbackDiagnostics">
+          <summary>Playback diagnostics</summary>
+          <p id="playbackDiagStatus" role="status">No playback events recorded yet.</p>
+          <div class="diagnostic-actions">
+            <button class="btn" id="copyPlaybackDiagnostics" type="button">Copy diagnostic report</button>
+          </div>
+          <pre id="playbackDiagLog" aria-live="polite"></pre>
+        </details>
+
         <!-- Outgoing Cross-References -->
         <div class="next">
           <h2 id="nextHead">Where it can go from here</h2>

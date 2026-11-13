@@ -399,6 +399,42 @@ input[type="text"]::placeholder {
   flex: 1 1 220px;
 }
 
+.playback-diagnostics {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.playback-diagnostics summary {
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.playback-diagnostics p {
+  margin: 8px 0;
+}
+
+.diagnostic-actions {
+  margin-bottom: 8px;
+}
+
+.playback-diagnostics pre {
+  max-height: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  padding: 8px;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 0.72rem/1.4 var(--f-mono);
+  -webkit-overflow-scrolling: touch;
+}
+
 h2 {
   margin: 0 0 8px;
   font: 500 0.78rem var(--f-ui);
