@@ -806,7 +806,7 @@
       }
     }
 
-    return { start, stop };
+    return { start, stop, unlock: () => { el(0).play().catch(() => {}); el(1).play().catch(() => {}); } };
   })();
 
   /* ---------- State & UI Rendering ---------- */
@@ -1066,12 +1066,12 @@
 
   $('play').addEventListener('click', () => {
     if (running) pause();
-    else go(cur);
+    else { player.unlock(); go(cur); }
   });
 
   $('skip').addEventListener('click', () => {
     const nx = advance();
-    if (running) go(nx);
+    if (running) { player.unlock(); go(nx); }
     else show(nx);
   });
 
@@ -1080,9 +1080,11 @@
     if (!b) return;
     if (PL) {
       PL.pos = PL.list.indexOf(+b.dataset.t);
+      player.unlock();
       go(wordStep(PL.pos));
       return;
     }
+    player.unlock();
     go({ i: +b.dataset.t, n: spanOf(+b.dataset.t, +b.dataset.n), via: 'ref', from: cur.i, votes: +b.dataset.v });
   });
 
@@ -1090,13 +1092,13 @@
     const b = e.target.closest('.wchip');
     if (b) {
       if (b.dataset.id) startWord(b.dataset.id);
-      else start($('words').dataset.q);
+      else { player.unlock(); start($('words').dataset.q); }
     }
   });
 
   $('seedNote').addEventListener('click', e => {
     const b = e.target.closest('.wchip[data-sug]');
-    if (b) start(b.dataset.sug.split(' · ')[0]);
+    if (b) { player.unlock(); start(b.dataset.sug.split(' · ')[0]); }
   });
 
   $('shuffle').addEventListener('change', () => {
