@@ -688,7 +688,6 @@
     let live = false;
     let painted = null;     // step currently on screen
     let timer = 0;
-    let warmed = false;
     let visibilityHandlerAttached = false;
     let diagnosticAudioId = 0;
     let pendingWatchdog = 0;
@@ -758,8 +757,6 @@
     // so that element is unlocked by the gesture. Element 1 needs its own
     // gesture-activated play() call, which this provides.
     function warmOther() {
-      if (warmed) return;
-      warmed = true;
       const a = el(1);
       a._u = '';
       a.src = silenceUrl(150);
@@ -929,6 +926,9 @@
 
     function start(step) {
       stop();
+      // Each restart needs a fresh gesture-triggered warm-up; stop() pauses
+      // both elements, so a previous session's unlock cannot be reused.
+      slot = 0;
       live = true;
       gen++;
       const g = gen;
@@ -989,25 +989,7 @@
       }
     }
 
-    function unlock() {
-      for (const i of [0, 1]) {
-        const a = el(i);
-        diag('audio.unlock-request', { element: a._diagId, ...sourceInfo(a) });
-        try {
-          const result = a.play();
-          if (result && typeof result.then === 'function') {
-            result.then(() => diag('audio.unlock-resolved', { element: a._diagId }))
-              .catch(err => diag('audio.unlock-rejected', { element: a._diagId, ...errorInfo(err), ...sourceInfo(a) }));
-          } else {
-            diag('audio.unlock-no-promise', { element: a._diagId });
-          }
-        } catch (err) {
-          diag('audio.unlock-threw', { element: a._diagId, ...errorInfo(err), ...sourceInfo(a) });
-        }
-      }
-    }
-
-    return { start, stop, unlock };
+    return { start, stop };
   })();
 
   /* ---------- State & UI Rendering ---------- */
@@ -1267,7 +1249,7 @@
 
   $('play').addEventListener('click', () => {
     if (running) pause();
-    else { player.unlock(); go(cur); }
+    else go(cur);
   });
 
   $('copyPlaybackDiagnostics').addEventListener('click', async () => {
@@ -1287,7 +1269,7 @@
 
   $('skip').addEventListener('click', () => {
     const nx = advance();
-    if (running) { player.unlock(); go(nx); }
+    if (running) go(nx);
     else show(nx);
   });
 
@@ -1296,11 +1278,9 @@
     if (!b) return;
     if (PL) {
       PL.pos = PL.list.indexOf(+b.dataset.t);
-      player.unlock();
       go(wordStep(PL.pos));
       return;
     }
-    player.unlock();
     go({ i: +b.dataset.t, n: spanOf(+b.dataset.t, +b.dataset.n), via: 'ref', from: cur.i, votes: +b.dataset.v });
   });
 
@@ -1308,13 +1288,13 @@
     const b = e.target.closest('.wchip');
     if (b) {
       if (b.dataset.id) startWord(b.dataset.id);
-      else { player.unlock(); start($('words').dataset.q); }
+      else start($('words').dataset.q);
     }
   });
 
   $('seedNote').addEventListener('click', e => {
     const b = e.target.closest('.wchip[data-sug]');
-    if (b) { player.unlock(); start(b.dataset.sug.split(' · ')[0]); }
+    if (b) start(b.dataset.sug.split(' · ')[0]);
   });
 
   $('shuffle').addEventListener('change', () => {
