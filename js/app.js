@@ -1023,7 +1023,7 @@
   function viaText(s) {
     if (s.via === 'ref') return 'Cross-reference from ' + refOf(s.from) + ' · strength ' + s.votes;
     if (s.via === 'next') return 'Reading on from ' + refOf(s.from);
-    if (s.via === 'word' && PL) return 'Occurrence ' + (s.k + 1) + ' of ' + s.total + ' · ' + SW.d[PL.id][0] + ' ' + PL.id;
+    if (s.via === 'word' && PL) return SW.d[PL.id][0] + ' ' + PL.id;
     if (s.via === 'return') return 'No close link left, so returning to a verse near your topic';
     return 'Starting verse';
   }
