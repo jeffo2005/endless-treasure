@@ -3,6 +3,11 @@
  * Responsive layout, fluid typography, light & dark theme variables.
  */
 
+/* Ensure the hidden attribute always wins over display rules */
+[hidden] {
+  display: none !important;
+}
+
 :root {
   --bg: #ECEFED;
   --panel: #F6F8F7;
@@ -547,6 +552,52 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* Verse Preview: word-as-seed picker */
+.verse-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.vp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vp-text {
+  font-size: clamp(1.05rem, 2.6vw, 1.5rem);
+  line-height: 1.9;
+}
+
+.vpword {
+  font: inherit;
+  background: var(--accent-soft);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 4px;
+  margin: 0 1px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.vpword:hover {
+  border-color: var(--accent);
+}
+
+.vpv {
+  font: 500 0.75rem var(--f-mono);
+  color: var(--muted);
+  margin-right: 4px;
 }
 
 .wlist {

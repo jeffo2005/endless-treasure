@@ -57,9 +57,18 @@
 
         <p class="note" id="seedNote" aria-live="polite"></p>
 
+        <!-- Verse Preview: pick a word to seed with, or use the whole verse -->
+        <div class="verse-preview" id="versePreview" hidden>
+          <div class="vp-head">
+            <span class="ref" id="vpRef"></span>
+            <button id="vpWholeVerse" class="btn primary" type="button">Use this verse as seed</button>
+          </div>
+          <blockquote class="verse vp-text" id="vpText"></blockquote>
+        </div>
+
         <!-- Original Hebrew/Greek Word Study Picker -->
         <div class="words" id="words" hidden>
-          <h2>Study the original word</h2>
+          <h2 id="wordsHead">Study the original word</h2>
           <div class="wlist" id="wlist"></div>
         </div>
 

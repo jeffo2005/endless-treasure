@@ -1152,6 +1152,8 @@
     box.hidden = !c.length;
     if (!c.length) return;
     box.dataset.q = q;
+    box.dataset.mode = 'topic';
+    $('wordsHead').textContent = 'Study the original word';
     $('wlist').innerHTML = '<button class="wchip" type="button" data-id="" aria-pressed="' + !active + '"><span class="wl">All meanings</span><span class="wg">Verses about “' + esc(q) + '” in any sense, following cross-references.</span></button>' +
       c.map(x => {
         const d = SW.d[x.id];
@@ -1168,9 +1170,92 @@
     PL = { id, base, list: base, pos: 0 };
     $('shuffleWrap').hidden = false;
     applyShuffle();
+    $('versePreview').hidden = true;
     $('seedNote').textContent = 'Playing all ' + base.length + ' verses with ' + d[0] + ' (' + d[1] + ', ' + id + ') ' + ($('shuffle').checked ? 'in shuffled order.' : 'in Bible order.');
-    renderPicker($('words').dataset.q, id);
+    if ($('words').dataset.mode === 'verse' && lastRoot) renderRootPicker(lastRoot.v, lastRoot.word, id);
+    else renderPicker($('words').dataset.q, id);
     go(wordStep(0));
+  }
+
+  /* ---------- Verse Preview: word-as-seed choice ---------- */
+  let VP = null;        // previewed reference { i, n, label }
+  let lastRoot = null;  // last verse-word picker context { v, word }
+
+  function showVersePreview(r) {
+    VP = r;
+    const box = $('versePreview');
+    box.hidden = false;
+    $('vpRef').textContent = r.label;
+    let h = '';
+    for (let k = 0; k < r.n; k++) {
+      const v = r.i + k;
+      if (r.n > 1) h += '<span class="vpv">' + i2v(v) + '</span>';
+      for (const w of TEXT[v].split(' ')) {
+        const clean = w.toLowerCase().replace(/[^a-z]/g, '');
+        if (!clean || STOP.has(clean)) { h += esc(w) + ' '; continue; }
+        h += '<button class="vpword" type="button" data-v="' + v + '" data-w="' + esc(w) + '" title="Seed the journey with this word">' + esc(w) + '</button> ';
+      }
+    }
+    $('vpText').innerHTML = h;
+  }
+
+  // Which Strong's words occur in verse v (inverse of SW.o, via cached occurrence lists)
+  const svCache = new Map();
+  function strongsInVerse(v) {
+    let a = svCache.get(v);
+    if (!a) {
+      a = [];
+      for (const id in SW.o) {
+        const occ = occOf(id);
+        let lo = 0, hi = occ.length - 1, found = false;
+        while (lo <= hi) {
+          const m = (lo + hi) >> 1;
+          if (occ[m] === v) { found = true; break; }
+          if (occ[m] < v) lo = m + 1; else hi = m - 1;
+        }
+        if (found) a.push(id);
+      }
+      svCache.set(v, a);
+    }
+    return a;
+  }
+
+  // Root-word picker for one word of a specific verse
+  function renderRootPicker(v, word, active) {
+    if (!IDX) buildIndex();
+    lastRoot = { v, word };
+    const box = $('words');
+    const st = stem((word.toLowerCase().match(/[a-z]+/g) || []).join(''));
+    let cands = [], fallback = false;
+    if (st) {
+      cands = strongsInVerse(v).filter(id => {
+        const k = SW.d[id][3].toLowerCase().match(/[a-z]{3,}/g) || [];
+        return k.some(w => stem(w) === st);
+      });
+      if (!cands.length) {
+        fallback = true;
+        cands = wordSearch(word).map(x => x.id);
+      }
+    }
+    box.dataset.q = word;
+    box.dataset.mode = 'verse';
+    if (!cands.length) {
+      $('seedNote').textContent = 'No original-language entry matched “' + word + '” in this verse. Try another word.';
+      return;
+    }
+    box.hidden = false;
+    $('wordsHead').textContent = fallback
+      ? 'Possible original words for “' + word + '”'
+      : 'Original word behind “' + word + '” in ' + refOf(v);
+    $('wlist').innerHTML = cands.map(id => {
+      const d = SW.d[id];
+      return '<button class="wchip" type="button" data-id="' + id + '" aria-pressed="' + (id === active) + '">' +
+        '<span class="wl" dir="auto">' + esc(d[0]) + '</span>' +
+        '<span class="wx">' + esc(d[1]) + ' · ' + id + ' · ' + occOf(id).length + ' verses</span>' +
+        '<span class="wg">' + esc(d[2]) + '</span>' +
+        '<span class="wg">KJV: ' + esc(d[3]) + '</span></button>';
+    }).join('');
+    if (cands.length) box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   /* ---------- Starting Points ---------- */
@@ -1179,16 +1264,22 @@
     if (!q) return;
     const note = $('seedNote');
     $('words').hidden = true;
+    $('versePreview').hidden = true;
     const r = parseRef(q);
     if (r && r.error) {
       note.textContent = r.error;
       return;
     }
     if (r) {
-      note.textContent = 'Working out which verses stay close to ' + r.label + '…';
-      setAnchor(anchorFromRef(r.i, r.n, r.chapterOnly));
-      note.textContent = 'Starting at ' + r.label + ' and staying close to ' + (r.chapterOnly ? 'its theme.' : 'it.');
-      go({ i: r.i, n: r.n, via: 'seed' });
+      if (r.chapterOnly) {
+        note.textContent = 'Working out which verses stay close to ' + r.label + '…';
+        setAnchor(anchorFromRef(r.i, r.n, r.chapterOnly));
+        note.textContent = 'Starting at ' + r.label + ' and staying close to its theme.';
+        go({ i: r.i, n: r.n, via: 'seed' });
+        return;
+      }
+      showVersePreview(r);
+      note.textContent = 'Choose a word below to seed the journey with, or use the whole verse.';
       return;
     }
     const res = searchTopic(q);
@@ -1256,6 +1347,21 @@
   $('seedForm').addEventListener('submit', e => {
     e.preventDefault();
     start($('q').value);
+  });
+
+  $('vpWholeVerse').addEventListener('click', () => {
+    if (!VP) return;
+    setAnchor(anchorFromRef(VP.i, VP.n, false));
+    $('versePreview').hidden = true;
+    $('words').hidden = true;
+    $('seedNote').textContent = 'Starting at ' + VP.label + ' and staying close to it.';
+    go({ i: VP.i, n: VP.n, via: 'seed' });
+  });
+
+  $('vpText').addEventListener('click', e => {
+    const b = e.target.closest('.vpword');
+    if (!b) return;
+    renderRootPicker(+b.dataset.v, b.dataset.w);
   });
 
   $('chips').addEventListener('click', e => {
