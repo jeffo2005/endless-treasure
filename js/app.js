@@ -1014,6 +1014,12 @@
   const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const GLYPH = { seed: '●', ref: '↳', next: '→', return: '⟲', word: '◆' };
 
+  // Persistent legend explaining the pathway symbols (rendered under the trail card)
+  const GLYPH_LABEL = { seed: 'Start', ref: 'Cross-reference', next: 'Read on', return: 'Return to topic', word: 'Word occurrence' };
+  $('legend').innerHTML = Object.keys(GLYPH)
+    .map(k => '<span class="lg"><span class="lg-g" aria-hidden="true">' + GLYPH[k] + '</span> ' + GLYPH_LABEL[k] + '</span>')
+    .join('<span class="lg-sep" aria-hidden="true">·</span>');
+
   function viaText(s) {
     if (s.via === 'ref') return 'Cross-reference from ' + refOf(s.from) + ' · strength ' + s.votes;
     if (s.via === 'next') return 'Reading on from ' + refOf(s.from);

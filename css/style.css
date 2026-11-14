@@ -548,6 +548,45 @@ h2 {
   font-size: 0.9rem;
 }
 
+/* Pathway Symbol Legend */
+.right-col {
+  min-width: 0;
+}
+
+.legend {
+  margin: 8px 4px 0;
+}
+
+.lg-head {
+  margin: 0 0 2px;
+  font: 700 0.78rem var(--f-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+.lg-items {
+  margin: 0;
+  font: 400 0.78rem var(--f-mono);
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+.lg-items .lg-g {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.lg-items .lg-sep {
+  margin: 0 7px;
+}
+
+@media (min-width: 900px) {
+  .right-col {
+    grid-column: 2;
+  }
+}
+
 .words {
   display: flex;
   flex-direction: column;
