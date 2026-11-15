@@ -2,7 +2,7 @@
 
 > **Infinite Scripture Audio & Cross-Reference Explorer**
 
-Endless Treasury is an interactive, continuous Scripture listening and non-linear exploration application. Starting from any verse or topical theme, it continuously journeys through the King James Bible by following the cross-reference pathways of the **Treasury of Scripture Knowledge (TSK)**, reading each verse aloud using your browser's native Text-to-Speech engine.
+Endless Treasure is an interactive, continuous Scripture listening and non-linear exploration application. Starting from any verse or topical theme, it continuously journeys through the King James Bible by following the cross-reference pathways of the **Treasury of Scripture Knowledge (TSK)**, reading each verse aloud using your browser's native Text-to-Speech engine.
 
 ---
 
