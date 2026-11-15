@@ -215,6 +215,62 @@ input[type="text"]::placeholder {
   border-color: var(--accent);
 }
 
+.cats-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 8px;
+}
+
+.cats-label {
+  font: 500 0.78rem var(--f-ui);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cat-reset {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--muted);
+  font: 400 0.78rem var(--f-ui);
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.cat-reset:hover {
+  color: var(--accent);
+  border-color: var(--line);
+}
+
+.cats .cat {
+  font: 400 0.78rem var(--f-ui);
+  padding: 3px 10px;
+}
+
+.cats .cat[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.cats .cat[disabled] {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cats .cat[disabled][aria-pressed="true"] {
+  opacity: 0.55;
+}
+
 .note {
   margin: 0;
   color: var(--muted);

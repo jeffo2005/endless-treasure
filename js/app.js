@@ -393,17 +393,30 @@
       const l = S.last.get(v);
       return l === undefined || S.step - l >= cool;
     };
+    // Relevance-pool gate. With a scope active, in-scope verses are always
+    // eligible (the scope is the hard constraint; the top-K pool may not
+    // intersect a narrow category at all, e.g. Law + an NT seed).
+    const kOk = v => (CAT === 'all' ? A.pos[v] < K : catOK(v));
 
     if (rand() >= jump) {
       let ni = cur.i + cur.n;
-      if (ni >= TEXT.length) ni = 0;
-      if (A.pos[ni] < K && ok(ni)) return { i: ni, n: 1, via: 'next', from: cur.i };
+      if (CAT === 'all') {
+        if (ni >= TEXT.length) ni = 0;
+        if (kOk(ni) && ok(ni)) return { i: ni, n: 1, via: 'next', from: cur.i };
+      } else {
+        // Search the whole canon, wrapping once, so even a long gap between
+        // categories cannot prevent the read-on path from finding scope.
+        for (let d = 0; d < TEXT.length; d++) {
+          const v = (ni + d) % TEXT.length;
+          if (catOK(v) && kOk(v) && ok(v)) return { i: v, n: 1, via: 'next', from: cur.i };
+        }
+      }
     }
 
     if (!GR) buildGraph();
     const cand = new Map();
     const add = (t, n, votes, mul) => {
-      if (t === cur.i || A.pos[t] >= K || !ok(t)) return;
+      if (t === cur.i || !kOk(t) || !ok(t) || !spanInScope(t, n)) return;
       const w = Math.pow(Math.max(votes, 1), 0.7) * Math.pow(0.25 + A.rel[t], 2) * mul * (S.last.has(t) ? 0.4 : 1);
       const o = cand.get(t);
       if (!o || w > o.w) cand.set(t, { t, n, votes, w });
@@ -424,13 +437,32 @@
       const v = A.order[Math.floor(rand() * Math.min(K, TEXT.length))];
       if (v !== cur.i) pool.push(v);
     }
-    const fresh = pool.filter(ok);
+    let fresh = pool.filter(ok).filter(catOK);
+    if (!fresh.length) {
+      // Widen: first unused in-scope verse in relevance order.
+      for (let k = 0; k < A.order.length; k++) {
+        const v = A.order[k];
+        if (v !== cur.i && kOk(v) && ok(v) && catOK(v)) { fresh = [v]; break; }
+      }
+    }
+    if (!fresh.length) {
+      // Last resort within scope: nearest in-scope verse ahead in Bible order.
+      for (let d = 1; d < TEXT.length; d++) {
+        const v = (cur.i + d) % TEXT.length;
+        if (kOk(v) && ok(v) && catOK(v)) { fresh = [v]; break; }
+      }
+    }
     if (fresh.length) {
       const v = weightedPick(fresh, fresh.map(x => 0.25 + A.rel[x]));
       return { i: v, n: 1, via: 'return', from: cur.i };
     }
-    let oldest = pool[0];
-    for (const v of pool) {
+    // Cooldown can exhaust every fresh scoped verse. The final fallback must
+    // still honor scope rather than selecting an arbitrary top-K pool item.
+    const fallbackPool = CAT === 'all'
+      ? pool
+      : Array.from({ length: TEXT.length }, (_, v) => v).filter(v => catOK(v) && v !== cur.i);
+    let oldest = fallbackPool[0];
+    for (const v of fallbackPool) {
       if ((S.last.get(v) ?? -1) < (S.last.get(oldest) ?? -1)) oldest = v;
     }
     return { i: oldest, n: 1, via: 'return', from: cur.i };
@@ -1000,11 +1032,148 @@
   const pickFrom = arr => arr[Math.floor(rand() * arr.length)];
   const K = () => poolSize(+$('focus').value);
 
+  /* ---------- Scripture Scope Filter (book categories) ---------- */
+  // Book-index ranges into G.books (Genesis=0 … Revelation=65).
+  const CATS = {
+    all: null,
+    ot: [0, 38],
+    nt: [39, 65],
+    law: [0, 4],          // Genesis–Deuteronomy
+    history: [5, 16],     // Joshua–Esther
+    wisdom: [17, 21],     // Job–Song of Solomon
+    prophets: [22, 38],   // Isaiah–Malachi
+    gospels: [39, 43],    // Matthew–Acts
+    letters: [44, 65]     // Romans–Revelation
+  };
+
+  let CAT = (() => { const v = load('cat'); return CATS[v] ? v : 'all'; })();
+
+  const catOK = i => {
+    const c = CATS[CAT];
+    return !c || (() => { const b = CH[chapOf(i)][0]; return b >= c[0] && b <= c[1]; })();
+  };
+
+  const spanInScope = (i, n) => {
+    for (let k = 0; k < n; k++) if (!catOK(i + k)) return false;
+    return true;
+  };
+
+  const catLabel = () => {
+    const b = $('cats') && $('cats').querySelector('[data-cat="' + CAT + '"]');
+    return b ? b.textContent : 'All';
+  };
+
+  const scopeSuffix = () => (CAT === 'all' ? '' : ' within ' + catLabel());
+
+  // Does a Strong's entry occur at least once in the active scope?
+  const idInScope = id => {
+    if (CAT === 'all') return true;
+    const o = occOf(id);
+    for (let k = 0; k < o.length; k++) if (catOK(o[k])) return true;
+    return false;
+  };
+
+  // Every verse any of these entries occurs in (for per-category advice).
+  const idVerses = ids => {
+    const all = new Set();
+    for (const id of ids) for (const v of occOf(id)) all.add(v);
+    return [...all];
+  };
+
+  // Grey out chips for categories the given verse list never touches.
+  // Pass null/undefined to re-enable everything (no word/topic in play).
+  function updateCatGrey(verses) {
+    const chips = $('cats').querySelectorAll('.cat');
+    if (!verses || !verses.length) {
+      for (const b of chips) b.disabled = false;
+      return;
+    }
+    const books = new Set();
+    for (const v of verses) books.add(CH[chapOf(v)][0]);
+    for (const b of chips) {
+      if (b.dataset.cat === 'all') { b.disabled = false; continue; }
+      const c = CATS[b.dataset.cat];
+      let hit = false;
+      for (const bk of books) { if (bk >= c[0] && bk <= c[1]) { hit = true; break; } }
+      b.disabled = !hit;
+    }
+  }
+
+  // Clickable scope suggestions for the seed note, e.g. "Gospels (74)".
+  // q re-runs a topic start under the new scope; word journeys just re-filter.
+  function catAdviceHtml(verses, q, root) {
+    const counts = {};
+    const uniqueVerses = new Set(verses);
+    for (const v of uniqueVerses) {
+      const b = CH[chapOf(v)][0];
+      for (const key in CATS) {
+        if (key === 'all') continue;
+        const c = CATS[key];
+        if (b >= c[0] && b <= c[1]) counts[key] = (counts[key] || 0) + 1;
+      }
+    }
+    let attr = q ? ' data-q="' + esc(q) + '"' : '';
+    if (root) attr += ' data-rootv="' + root.v + '" data-rootw="' + esc(root.w) + '"';
+    const chips = Object.keys(CATS)
+      .filter(k => k !== 'all' && counts[k])
+      .map(k => {
+        const label = $('cats').querySelector('[data-cat="' + k + '"]').textContent;
+        return '<button class="wchip" type="button" data-catsug="' + k + '"' + attr + '>' + label + ' (' + counts[k] + ')</button>';
+      });
+    chips.unshift('<button class="wchip" type="button" data-catsug="all"' + attr + '>All (' + uniqueVerses.size + ')</button>');
+    return chips.join(' ');
+  }
+
+  function setCat(id, silent) {
+    if (!CATS[id]) id = 'all';
+    CAT = id;
+    store('cat', id);
+    for (const b of $('cats').children) {
+      if (b.dataset.cat === id) b.setAttribute('aria-pressed', 'true');
+      else if (b.getAttribute('aria-pressed') === 'true') b.setAttribute('aria-pressed', 'false');
+    }
+    if (silent) return;
+    if (PL) refilterPlaylist();
+    else $('seedNote').textContent = 'Scope: ' + catLabel() + ' — the journey now stays within ' + catLabel() + '.';
+    // Live re-filter of an open root picker under the new scope.
+    const w = $('words');
+    // Keep picker context even when a scope temporarily hides its empty state;
+    // changing to a compatible scope should repopulate it without advice-chip use.
+    if (w.dataset.mode === 'verse' && lastRoot) renderRootPicker(lastRoot.v, lastRoot.word, PL ? PL.id : undefined);
+    else if (w.dataset.mode === 'topic' && w.dataset.q) renderPicker(w.dataset.q, PL ? PL.id : undefined);
+  }
+
+  // Rebuild the active word playlist under the current scope, keeping the
+  // current verse when it is still in scope (else the nearest one after it).
+  function refilterPlaylist() {
+    if (!PL) return;
+    const here = PL.list[PL.pos];
+    const filt = PL.base.filter(catOK);
+    if (!filt.length) {
+      PL.filt = null;
+      applyShuffle();
+      PL.pos = Math.max(0, PL.list.indexOf(here));
+      $('seedNote').innerHTML = 'No ' + esc(catLabel()) + ' verses contain ' + esc(SW.d[PL.id][0]) + ' (' + PL.id + ') — playing all ' + PL.base.length + '. It appears in: ' + catAdviceHtml(PL.base);
+      renderNext();
+      return;
+    }
+    PL.filt = CAT === 'all' ? null : filt;
+    applyShuffle();
+    let p = PL.list.indexOf(here);
+    if (p < 0) p = PL.list.findIndex(v => v >= here);
+    PL.pos = Math.max(0, p);
+    $('seedNote').textContent = CAT === 'all'
+      ? 'Playing all ' + PL.base.length + ' verses with ' + SW.d[PL.id][0] + ' (' + PL.id + ').'
+      : 'Scope: ' + filt.length + ' of ' + PL.base.length + ' verses with ' + SW.d[PL.id][0] + ' (' + PL.id + ').';
+    renderNext();
+  }
+
   function setAnchor(a) {
     A = a;
     S = { step: 0, last: new Map() };
     PL = null;
     $('shuffleWrap').hidden = true;
+    updateCatGrey(null);
   }
 
   function ensureAnchor() {
@@ -1051,12 +1220,15 @@
     const e = ADJ[cur.i], k0 = K();
     let h = '', shown = 0;
     for (let k = 0; k < e.length && shown < 6; k += 3) {
-      if (A && A.pos[e[k]] >= k0) continue;
+      if (CAT === 'all' && A && A.pos[e[k]] >= k0) continue;
+      if (!spanInScope(e[k], e[k + 1])) continue;
       shown++;
       h += '<li><button type="button" data-t="' + e[k] + '" data-n="' + e[k + 1] + '" data-v="' + e[k + 2] + '">' +
         esc(refOf(e[k], e[k + 1])) + '<span>' + e[k + 2] + '</span></button></li>';
     }
-    ul.innerHTML = h || '<li class="note">No on-topic link from this verse. It will read on, or return to a verse near your topic.</li>';
+    ul.innerHTML = h || '<li class="note">' + (CAT === 'all'
+      ? 'No on-topic link from this verse. It will read on, or return to a verse near your topic.'
+      : 'No ' + esc(catLabel()) + ' links from this verse. It will read on, or return within ' + esc(catLabel()) + '.') + '</li>';
   }
 
   function show(step) {
@@ -1123,11 +1295,12 @@
   const wordStep = p => ({ i: PL.list[p], n: 1, via: 'word', k: p, total: PL.list.length });
 
   function applyShuffle() {
+    const src = PL.filt || PL.base;
     if (!$('shuffle').checked) {
-      PL.list = PL.base;
+      PL.list = src;
       return;
     }
-    const a = [...PL.base];
+    const a = [...src];
     for (let k = a.length - 1; k > 0; k--) {
       const j = Math.floor(rand() * (k + 1));
       [a[k], a[j]] = [a[j], a[k]];
@@ -1136,12 +1309,21 @@
   }
 
   function renderPicker(q, active) {
-    const c = wordSearch(q), box = $('words');
-    box.hidden = !c.length;
-    if (!c.length) return;
+    const raw = wordSearch(q), box = $('words');
     box.dataset.q = q;
     box.dataset.mode = 'topic';
-    $('wordsHead').textContent = 'Study the original word';
+    if (!raw.length) { box.hidden = true; return; }
+    let c = raw;
+    if (CAT !== 'all') {
+      c = raw.filter(x => idInScope(x.id));
+      if (!c.length) {
+        box.hidden = true;
+        if (!PL) $('seedNote').innerHTML = 'No original words for “' + esc(q) + '” occur within ' + esc(catLabel()) + '. They appear in: ' + catAdviceHtml(idVerses(raw.map(x => x.id)), q);
+        return;
+      }
+    }
+    box.hidden = false;
+    $('wordsHead').textContent = 'Study the original word' + scopeSuffix();
     $('wlist').innerHTML = '<button class="wchip" type="button" data-id="" aria-pressed="' + !active + '"><span class="wl">All meanings</span><span class="wg">Verses about “' + esc(q) + '” in any sense, following cross-references.</span></button>' +
       c.map(x => {
         const d = SW.d[x.id];
@@ -1155,11 +1337,20 @@
 
   function startWord(id) {
     const base = occOf(id), d = SW.d[id];
-    PL = { id, base, list: base, pos: 0 };
+    PL = { id, base, filt: null, list: base, pos: 0 };
     $('shuffleWrap').hidden = false;
+    const filt = base.filter(catOK);
+    updateCatGrey(base);
+    if (!filt.length) {
+      $('seedNote').innerHTML = 'No ' + esc(catLabel()) + ' verses contain ' + esc(d[0]) + ' (' + id + ') — playing all ' + base.length + '. It appears in: ' + catAdviceHtml(base);
+    } else if (filt.length < base.length) {
+      PL.filt = filt;
+      $('seedNote').textContent = 'Playing ' + filt.length + ' of ' + base.length + ' verses with ' + d[0] + ' (' + d[1] + ', ' + id + ') within ' + catLabel() + ($('shuffle').checked ? ', shuffled.' : '.');
+    } else {
+      $('seedNote').textContent = 'Playing all ' + base.length + ' verses with ' + d[0] + ' (' + d[1] + ', ' + id + ') ' + ($('shuffle').checked ? 'in shuffled order.' : 'in Bible order.');
+    }
     applyShuffle();
     $('versePreview').hidden = true;
-    $('seedNote').textContent = 'Playing all ' + base.length + ' verses with ' + d[0] + ' (' + d[1] + ', ' + id + ') ' + ($('shuffle').checked ? 'in shuffled order.' : 'in Bible order.');
     if ($('words').dataset.mode === 'verse' && lastRoot) renderRootPicker(lastRoot.v, lastRoot.word, id);
     else renderPicker($('words').dataset.q, id);
     go(wordStep(0));
@@ -1168,6 +1359,15 @@
   /* ---------- Verse Preview: word-as-seed choice ---------- */
   let VP = null;        // previewed reference { i, n, label }
   let lastRoot = null;  // last verse-word picker context { v, word }
+
+  function clearPickerContext() {
+    const box = $('words');
+    box.hidden = true;
+    box.dataset.q = '';
+    box.dataset.mode = '';
+    $('wlist').innerHTML = '';
+    lastRoot = null;
+  }
 
   function showVersePreview(r) {
     VP = r;
@@ -1228,14 +1428,24 @@
     box.dataset.q = word;
     box.dataset.mode = 'verse';
     if (!cands.length) {
+      box.hidden = true;
       $('seedNote').textContent = 'No original-language entry matched “' + word + '” in this verse. Try another word.';
       return;
     }
+    let shown = cands;
+    if (CAT !== 'all') {
+      shown = cands.filter(idInScope);
+      if (!shown.length) {
+        box.hidden = true;
+        if (!PL) $('seedNote').innerHTML = 'No original words in ' + esc(refOf(v)) + ' occur within ' + esc(catLabel()) + '. They appear in: ' + catAdviceHtml(idVerses(cands), null, { v, w: word });
+        return;
+      }
+    }
     box.hidden = false;
-    $('wordsHead').textContent = fallback
+    $('wordsHead').textContent = (fallback
       ? 'Possible original words for “' + word + '”'
-      : 'Original word behind “' + word + '” in ' + refOf(v);
-    $('wlist').innerHTML = cands.map(id => {
+      : 'Original word behind “' + word + '” in ' + refOf(v)) + scopeSuffix();
+    $('wlist').innerHTML = shown.map(id => {
       const d = SW.d[id];
       return '<button class="wchip" type="button" data-id="' + id + '" aria-pressed="' + (id === active) + '">' +
         '<span class="wl" dir="auto">' + esc(d[0]) + '</span>' +
@@ -1243,7 +1453,7 @@
         '<span class="wg">' + esc(d[2]) + '</span>' +
         '<span class="wg">KJV: ' + esc(d[3]) + '</span></button>';
     }).join('');
-    if (cands.length) box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (shown.length) box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   /* ---------- Starting Points ---------- */
@@ -1251,7 +1461,7 @@
     q = q.trim();
     if (!q) return;
     const note = $('seedNote');
-    $('words').hidden = true;
+    clearPickerContext();
     $('versePreview').hidden = true;
     const r = parseRef(q);
     if (r && r.error) {
@@ -1262,7 +1472,7 @@
       if (r.chapterOnly) {
         note.textContent = 'Working out which verses stay close to ' + r.label + '…';
         setAnchor(anchorFromRef(r.i, r.n, r.chapterOnly));
-        note.textContent = 'Starting at ' + r.label + ' and staying close to its theme.';
+        note.textContent = 'Starting at ' + r.label + ' and staying close to its theme' + scopeSuffix() + '.';
         go({ i: r.i, n: r.n, via: 'seed' });
         return;
       }
@@ -1284,12 +1494,20 @@
       return;
     }
     setAnchor(anchorFromTopic(res));
-    const s = pickFrom(res.ids.slice(0, 8));
+    updateCatGrey(res.ids);
+    const top = res.ids.filter(catOK);
+    let s;
+    if (top.length) {
+      s = pickFrom(top.slice(0, 8));
+      note.textContent = 'Press ▶ Play or choose a root word below. Scope: ' + catLabel() + ' — ' + top.length + ' of ' + res.ids.length + ' matches.';
+    } else {
+      s = pickFrom(res.ids.slice(0, 8));
+      note.innerHTML = 'No ' + esc(catLabel()) + ' verses match "' + esc(q) + '" — starting anywhere, but the walk will stay in ' + esc(catLabel()) + '. "' + esc(q) + '" appears in: ' + catAdviceHtml(res.ids, q);
+    }
     renderPicker(q);
     const step = { i: s, n: 1, via: 'seed' };
     show(step);
     cur = step;
-    note.textContent = 'Press ▶ Play or choose a root word below.';
   }
 
   function copyCurrentVerse() {
@@ -1341,8 +1559,8 @@
     if (!VP) return;
     setAnchor(anchorFromRef(VP.i, VP.n, false));
     $('versePreview').hidden = true;
-    $('words').hidden = true;
-    $('seedNote').textContent = 'Starting at ' + VP.label + ' and staying close to it.';
+    clearPickerContext();
+    $('seedNote').textContent = 'Starting at ' + VP.label + ' and staying close to it' + scopeSuffix() + '.';
     go({ i: VP.i, n: VP.n, via: 'seed' });
   });
 
@@ -1405,6 +1623,13 @@
   });
 
   $('seedNote').addEventListener('click', e => {
+    const c = e.target.closest('.wchip[data-catsug]');
+    if (c) {
+      setCat(c.dataset.catsug);
+      if (c.dataset.q) start(c.dataset.q);
+      else if (c.dataset.rootv) renderRootPicker(+c.dataset.rootv, c.dataset.rootw);
+      return;
+    }
     const b = e.target.closest('.wchip[data-sug]');
     if (b) start(b.dataset.sug.split(' · ')[0]);
   });
@@ -1415,6 +1640,32 @@
     applyShuffle();
     PL.pos = Math.max(0, PL.list.indexOf(here));
     renderNext();
+  });
+
+  $('cats').addEventListener('click', e => {
+    const b = e.target.closest('.cat');
+    if (!b || b.disabled) return;
+    setCat(b.dataset.cat);
+  });
+
+  // ↺ Reset — clear the whole scope filter: back to All, every chip re-enabled,
+  // and also clear any open root-word picker so the journey starts clean.
+  $('catsReset').addEventListener('click', () => {
+    const clearingWordJourney = !!PL;
+    const resumePlayback = clearingWordJourney && running;
+    const seed = clearingWordJourney ? { i: cur.i, n: cur.n, via: 'seed' } : null;
+    if (clearingWordJourney) setAnchor(anchorFromRef(cur.i, cur.n, false));
+    clearPickerContext();
+    updateCatGrey(null);
+    setCat('all');
+    if (seed) {
+      if (resumePlayback) go(seed); // discard queued word occurrences and continue from here
+      else show(seed);
+      $('seedNote').textContent = 'Scope reset to All; word journey cleared.';
+    } else {
+      $('seedNote').textContent = 'Scope reset to All.';
+      renderNext();
+    }
   });
 
   $('trail').addEventListener('click', e => {
@@ -1438,6 +1689,9 @@
 
   // Initialize theme from storage
   applyTheme(load('theme') || 'auto');
+
+  // Restore saved scripture scope (silent — no note on load)
+  setCat(CAT, true);
 
   // Sliders and Dials
   const dials = [

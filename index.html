@@ -55,6 +55,23 @@
           <button class="chip" type="button">Isaiah 53</button>
         </div>
 
+        <!-- Scripture Scope Filter -->
+        <div class="cats-row" role="group" aria-label="Scripture scope">
+          <span class="cats-label" id="catsLabel">Scripture scope:</span>
+          <div class="cats" id="cats">
+            <button class="chip cat" type="button" data-cat="all" aria-pressed="true">All</button>
+            <button class="chip cat" type="button" data-cat="ot" aria-pressed="false">OT</button>
+            <button class="chip cat" type="button" data-cat="nt" aria-pressed="false">NT</button>
+            <button class="chip cat" type="button" data-cat="law" aria-pressed="false">Law</button>
+            <button class="chip cat" type="button" data-cat="history" aria-pressed="false">History</button>
+            <button class="chip cat" type="button" data-cat="wisdom" aria-pressed="false">Wisdom</button>
+            <button class="chip cat" type="button" data-cat="prophets" aria-pressed="false">Prophets</button>
+            <button class="chip cat" type="button" data-cat="gospels" aria-pressed="false">Gospels</button>
+            <button class="chip cat" type="button" data-cat="letters" aria-pressed="false">Letters</button>
+          </div>
+          <button class="cat-reset" id="catsReset" type="button" title="Reset the scope filter to all scripture">↺ Reset</button>
+        </div>
+
         <p class="note" id="seedNote" aria-live="polite"></p>
 
         <!-- Verse Preview: pick a word to seed with, or use the whole verse -->
