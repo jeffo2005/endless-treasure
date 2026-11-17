@@ -1033,24 +1033,43 @@
   const K = () => poolSize(+$('focus').value);
 
   /* ---------- Scripture Scope Filter (book categories) ---------- */
-  // Book-index ranges into G.books (Genesis=0 … Revelation=65).
-  const CATS = {
-    all: null,
-    ot: [0, 38],
-    nt: [39, 65],
-    law: [0, 4],          // Genesis–Deuteronomy
-    history: [5, 16],     // Joshua–Esther
-    wisdom: [17, 21],     // Job–Song of Solomon
-    prophets: [22, 38],   // Isaiah–Malachi
-    gospels: [39, 43],    // Matthew–Acts
-    letters: [44, 65]     // Romans–Revelation
+  // Book-index sets into G.books (Genesis=0 … Revelation=65), mirroring
+  // Blue Letter Bible's pre-defined ranges. Categories intentionally overlap:
+  // Luke is in The Gospels and Luke-Acts; John and 1–3 John are in General
+  // Epistles and Johannine Writings; Revelation is only in Johannine Writings.
+  const bookRange = (a, b) => {
+    const out = [];
+    for (let i = a; i <= b; i++) out.push(i);
+    return out;
   };
 
-  let CAT = (() => { const v = load('cat'); return CATS[v] ? v : 'all'; })();
+  const CATS = {
+    all: null,
+    ot: bookRange(0, 38),
+    nt: bookRange(39, 65),
+    pentateuch: bookRange(0, 4),        // Genesis–Deuteronomy
+    historical: bookRange(5, 16),       // Joshua–Esther
+    poetical: bookRange(17, 21),        // Job–Song of Solomon
+    wisdom: [17, 19, 20],               // Job, Proverbs, Ecclesiastes
+    prophets: bookRange(22, 38),        // Isaiah–Malachi
+    major: bookRange(22, 26),           // Isaiah–Daniel
+    minor: bookRange(27, 38),           // Hosea–Malachi
+    gospels: bookRange(39, 42),         // Matthew–John
+    lukeacts: [41, 43],                 // Luke, Acts
+    pauline: bookRange(44, 56),         // Romans–Philemon
+    general: bookRange(57, 64),         // Hebrews–Jude
+    johannine: [42, 61, 62, 63, 65]     // John, 1–3 John, Revelation
+  };
+
+  const CAT_BOOKS = {};
+  for (const k in CATS) if (CATS[k]) CAT_BOOKS[k] = new Set(CATS[k]);
+
+  let CAT = (() => { const v = load('cat'); return (v in CATS) ? v : 'all'; })();
+  let catGreyVerses = null;
 
   const catOK = i => {
-    const c = CATS[CAT];
-    return !c || (() => { const b = CH[chapOf(i)][0]; return b >= c[0] && b <= c[1]; })();
+    const c = CAT_BOOKS[CAT];
+    return !c || c.has(CH[chapOf(i)][0]);
   };
 
   const spanInScope = (i, n) => {
@@ -1058,10 +1077,13 @@
     return true;
   };
 
-  const catLabel = () => {
-    const b = $('cats') && $('cats').querySelector('[data-cat="' + CAT + '"]');
-    return b ? b.textContent : 'All';
+  const catLabelOf = key => {
+    const sel = $('cats');
+    const opt = sel && sel.querySelector('option[value="' + key + '"]');
+    return opt ? opt.textContent : key;
   };
+
+  const catLabel = () => catLabelOf(CAT);
 
   const scopeSuffix = () => (CAT === 'all' ? '' : ' within ' + catLabel());
 
@@ -1080,26 +1102,34 @@
     return [...all];
   };
 
-  // Grey out chips for categories the given verse list never touches.
+  // Grey out categories the given verse list never touches.
   // Pass null/undefined to re-enable everything (no word/topic in play).
   function updateCatGrey(verses) {
-    const chips = $('cats').querySelectorAll('.cat');
+    catGreyVerses = verses || null;
+    const sel = $('cats');
+    if (!sel) return;
+    const opts = sel.querySelectorAll('option');
     if (!verses || !verses.length) {
-      for (const b of chips) b.disabled = false;
+      for (const o of opts) if (o.value) o.disabled = false;
       return;
     }
     const books = new Set();
     for (const v of verses) books.add(CH[chapOf(v)][0]);
-    for (const b of chips) {
-      if (b.dataset.cat === 'all') { b.disabled = false; continue; }
-      const c = CATS[b.dataset.cat];
+    for (const o of opts) {
+      const id = o.value;
+      if (!id) continue;                       // separator row
+      if (id === 'all') { o.disabled = false; continue; }
+      const set = CAT_BOOKS[id];
+      if (!set) continue;
       let hit = false;
-      for (const bk of books) { if (bk >= c[0] && bk <= c[1]) { hit = true; break; } }
-      b.disabled = !hit;
+      for (const bk of books) { if (set.has(bk)) { hit = true; break; } }
+      // Keep the active option selectable even when it has no hits; the
+      // seed note already explains the empty scope and offers alternatives.
+      o.disabled = !hit && id !== CAT;
     }
   }
 
-  // Clickable scope suggestions for the seed note, e.g. "Gospels (74)".
+  // Clickable scope suggestions for the seed note, e.g. "The Gospels (74)".
   // q re-runs a topic start under the new scope; word journeys just re-filter.
   function catAdviceHtml(verses, q, root) {
     const counts = {};
@@ -1108,8 +1138,7 @@
       const b = CH[chapOf(v)][0];
       for (const key in CATS) {
         if (key === 'all') continue;
-        const c = CATS[key];
-        if (b >= c[0] && b <= c[1]) counts[key] = (counts[key] || 0) + 1;
+        if (CAT_BOOKS[key].has(b)) counts[key] = (counts[key] || 0) + 1;
       }
     }
     let attr = q ? ' data-q="' + esc(q) + '"' : '';
@@ -1117,7 +1146,7 @@
     const chips = Object.keys(CATS)
       .filter(k => k !== 'all' && counts[k])
       .map(k => {
-        const label = $('cats').querySelector('[data-cat="' + k + '"]').textContent;
+        const label = catLabelOf(k);
         return '<button class="wchip" type="button" data-catsug="' + k + '"' + attr + '>' + label + ' (' + counts[k] + ')</button>';
       });
     chips.unshift('<button class="wchip" type="button" data-catsug="all"' + attr + '>All (' + uniqueVerses.size + ')</button>');
@@ -1125,16 +1154,17 @@
   }
 
   function setCat(id, silent) {
-    if (!CATS[id]) id = 'all';
+    if (!(id in CATS)) id = 'all';
     CAT = id;
     store('cat', id);
-    for (const b of $('cats').children) {
-      if (b.dataset.cat === id) b.setAttribute('aria-pressed', 'true');
-      else if (b.getAttribute('aria-pressed') === 'true') b.setAttribute('aria-pressed', 'false');
-    }
+    const sel = $('cats');
+    if (sel) sel.value = id;
+    updateCatGrey(catGreyVerses);
     if (silent) return;
     if (PL) refilterPlaylist();
-    else $('seedNote').textContent = 'Scope: ' + catLabel() + ' — the journey now stays within ' + catLabel() + '.';
+    else $('seedNote').textContent = CAT === 'all'
+      ? 'Scope: The Whole Bible — the journey can go anywhere in Scripture.'
+      : 'Scope: ' + catLabel() + ' — the journey now stays within ' + catLabel() + '.';
     // Live re-filter of an open root picker under the new scope.
     const w = $('words');
     // Keep picker context even when a scope temporarily hides its empty state;
@@ -1642,10 +1672,8 @@
     renderNext();
   });
 
-  $('cats').addEventListener('click', e => {
-    const b = e.target.closest('.cat');
-    if (!b || b.disabled) return;
-    setCat(b.dataset.cat);
+  $('cats').addEventListener('change', e => {
+    setCat(e.target.value);
   });
 
   // ↺ Reset — clear the whole scope filter: back to All, every chip re-enabled,
@@ -1661,9 +1689,9 @@
     if (seed) {
       if (resumePlayback) go(seed); // discard queued word occurrences and continue from here
       else show(seed);
-      $('seedNote').textContent = 'Scope reset to All; word journey cleared.';
+      $('seedNote').textContent = 'Scope reset to The Whole Bible; word journey cleared.';
     } else {
-      $('seedNote').textContent = 'Scope reset to All.';
+      $('seedNote').textContent = 'Scope reset to The Whole Bible.';
       renderNext();
     }
   });

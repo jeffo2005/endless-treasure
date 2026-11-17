@@ -229,10 +229,14 @@ input[type="text"]::placeholder {
   white-space: nowrap;
 }
 
-.cats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.cats-row .cat-select {
+  font: 400 0.78rem var(--f-ui);
+  padding: 4px 8px;
+  border-radius: 6px;
+  max-width: 100%;
+  min-width: 0;
+  flex: 0 1 auto;
+  cursor: pointer;
 }
 
 .cat-reset {
@@ -249,26 +253,6 @@ input[type="text"]::placeholder {
 .cat-reset:hover {
   color: var(--accent);
   border-color: var(--line);
-}
-
-.cats .cat {
-  font: 400 0.78rem var(--f-ui);
-  padding: 3px 10px;
-}
-
-.cats .cat[aria-pressed="true"] {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
-.cats .cat[disabled] {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.cats .cat[disabled][aria-pressed="true"] {
-  opacity: 0.55;
 }
 
 .note {
