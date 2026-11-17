@@ -382,6 +382,100 @@ input[type="text"]::placeholder {
   font-size: 1.05rem;
 }
 
+/* Floating phone transport */
+.float-dock {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 95%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.float-dock::before {
+  content: "";
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 120px;
+  background: linear-gradient(to top, var(--bg) 28%, transparent);
+  pointer-events: none;
+  z-index: -1;
+}
+
+.float-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.float-ref {
+  font: 500 0.8rem var(--f-mono);
+  color: var(--accent);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.float-status {
+  font: 400 0.7rem var(--f-ui);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.float-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.float-dock .btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.float-dock .btn.primary {
+  min-width: 96px;
+}
+
+.float-dock .btn + .btn {
+  min-width: 68px;
+}
+
+.float-dock[hidden] {
+  display: none;
+}
+
+@media (max-width: 899px) {
+  body.float-dock-visible {
+    padding-bottom: calc(28px + 78px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (min-width: 900px) {
+  .float-dock {
+    display: none !important;
+  }
+}
+
 .check {
   display: inline-flex;
   align-items: center;

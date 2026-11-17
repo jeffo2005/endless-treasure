@@ -575,6 +575,7 @@
     const tag = $('versionTag');
     if (tag) tag.textContent = BIBLES[BIBLE].short;
     document.documentElement.dataset.bible = BIBLE;
+    updateFloatMeta();
   }
 
   function stepIsOmitted(step) {
@@ -1458,6 +1459,7 @@
     }
     $('verseText').innerHTML = h;
     renderNext();
+    updateFloatMeta();
   }
 
   function i2v(i) {
@@ -1465,9 +1467,78 @@
     return i - chapStart[k] + 1;
   }
 
+  function setPlayLabels(on) {
+    const label = on ? 'Pause' : 'Play';
+    const aria = on ? 'Pause scripture' : 'Play scripture';
+    for (const id of ['play', 'floatPlay']) {
+      const b = $(id);
+      if (!b) continue;
+      b.textContent = label;
+      b.setAttribute('aria-label', aria);
+    }
+  }
+
+  function updateFloatMeta() {
+    const refEl = $('floatRef'), st = $('floatStatus');
+    if (!refEl || !st) return;
+    refEl.textContent = refOf(cur.i, cur.n);
+    st.textContent = (running ? 'Playing' : 'Paused') + ' · ' + BIBLES[BIBLE].name;
+  }
+
   function setRunning(on) {
     running = on;
-    $('play').textContent = on ? 'Pause' : 'Play';
+    setPlayLabels(on);
+    updateFloatMeta();
+  }
+
+  function togglePlayback() {
+    if (running) pause();
+    else if (omittedStep && omittedStep === cur) resumeAfterOmitted();
+    else go(cur);
+  }
+
+  function nextVerse() {
+    const wasOmitted = omittedStep && omittedStep === cur;
+    const nx = advance();
+    if (wasOmitted) $('seedNote').textContent = '';
+    if (running) go(nx);
+    else show(nx);
+  }
+
+  /* ---------- Floating phone transport visibility ---------- */
+  const floatMedia = window.matchMedia('(max-width: 899px)');
+  let floatRaf = 0;
+
+  function isEditableTarget() {
+    const el = document.activeElement;
+    if (!el) return false;
+    if (el.isContentEditable) return true;
+    if (!/^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return false;
+    return !/^(checkbox|radio|range|button)$/.test(el.type || '');
+  }
+
+  function syncFloatVisibility() {
+    const dock = $('floatDock');
+    if (!dock) return;
+    const transport = document.querySelector('.transport');
+    let transportInView = true;
+    if (transport) {
+      const r = transport.getBoundingClientRect();
+      transportInView = r.bottom > 0 && r.top < window.innerHeight;
+    }
+    const visible = floatMedia.matches && !transportInView && !isEditableTarget();
+    if (dock.hidden === visible) {
+      dock.hidden = !visible;
+      document.body.classList.toggle('float-dock-visible', visible);
+    }
+  }
+
+  function scheduleFloatSync() {
+    if (floatRaf) return;
+    floatRaf = requestAnimationFrame(() => {
+      floatRaf = 0;
+      syncFloatVisibility();
+    });
   }
 
   function go(step) {
@@ -1811,11 +1882,7 @@
     start(b.textContent);
   });
 
-  $('play').addEventListener('click', () => {
-    if (running) pause();
-    else if (omittedStep && omittedStep === cur) resumeAfterOmitted();
-    else go(cur);
-  });
+  $('play').addEventListener('click', togglePlayback);
 
   $('copyPlaybackDiagnostics').addEventListener('click', async () => {
     const report = [
@@ -1832,13 +1899,11 @@
     }
   });
 
-  $('skip').addEventListener('click', () => {
-    const wasOmitted = omittedStep && omittedStep === cur;
-    const nx = advance();
-    if (wasOmitted) $('seedNote').textContent = '';
-    if (running) go(nx);
-    else show(nx);
-  });
+  $('skip').addEventListener('click', nextVerse);
+
+  // Floating phone transport shares the in-flow controls
+  if ($('floatPlay')) $('floatPlay').addEventListener('click', togglePlayback);
+  if ($('floatNext')) $('floatNext').addEventListener('click', nextVerse);
 
   $('nextList').addEventListener('click', e => {
     const b = e.target.closest('button');
@@ -1981,13 +2046,22 @@
   if ('mediaSession' in navigator) {
     try {
       navigator.mediaSession.setActionHandler('play', () => {
-        if (running) return;
-        if (omittedStep && omittedStep === cur) resumeAfterOmitted();
-        else go(cur);
+        if (!running) togglePlayback();
       });
       navigator.mediaSession.setActionHandler('pause', pause);
-      navigator.mediaSession.setActionHandler('nexttrack', () => $('skip').click());
+      navigator.mediaSession.setActionHandler('nexttrack', nextVerse);
     } catch (e) {}
+  }
+
+  // The floating dock appears only on phones once the transport scrolls away.
+  window.addEventListener('scroll', scheduleFloatSync, { passive: true });
+  window.addEventListener('resize', scheduleFloatSync);
+  document.addEventListener('focusin', scheduleFloatSync);
+  document.addEventListener('focusout', scheduleFloatSync);
+  if (floatMedia.addEventListener) floatMedia.addEventListener('change', scheduleFloatSync);
+  const transportEl = document.querySelector('.transport');
+  if ('IntersectionObserver' in window && transportEl) {
+    new IntersectionObserver(scheduleFloatSync).observe(transportEl);
   }
 
   if (!ttsOK) {
@@ -1998,6 +2072,7 @@
 
   // Initialize View
   show(cur);
+  syncFloatVisibility();
   setTimeout(() => {
     ensureAnchor();
     renderNext();

@@ -121,11 +121,23 @@
 
         <!-- Transport Audio Controls -->
         <div class="transport">
-          <button class="btn primary big" id="play" type="button">Play</button>
-          <button class="btn" id="skip" type="button">Next verse</button>
+          <button class="btn primary big" id="play" type="button" aria-label="Play scripture" aria-keyshortcuts="Space">Play</button>
+          <button class="btn" id="skip" type="button" aria-label="Next verse" aria-keyshortcuts="ArrowRight">Next verse</button>
           <label class="check"><input type="checkbox" id="sound" checked> Sound</label>
           <label class="check"><input type="checkbox" id="announce" checked> Say the reference</label>
           <label class="check" id="shuffleWrap" hidden><input type="checkbox" id="shuffle"> Shuffle <span class="shuffle-hint">— plays the verses in random order instead of Bible order</span></label>
+        </div>
+
+        <!-- Floating phone transport: shown only when the in-flow controls are off-screen -->
+        <div class="float-dock" id="floatDock" hidden role="group" aria-label="Floating playback controls">
+          <span class="float-meta">
+            <span class="float-ref" id="floatRef"></span>
+            <span class="float-status" id="floatStatus"></span>
+          </span>
+          <span class="float-actions">
+            <button class="btn primary" id="floatPlay" type="button" aria-label="Play scripture" aria-keyshortcuts="Space">Play</button>
+            <button class="btn" id="floatNext" type="button" aria-label="Next verse" aria-keyshortcuts="ArrowRight">Next</button>
+          </span>
         </div>
 
         <!-- Pacing & PageRank Dials -->
