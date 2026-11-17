@@ -1,9 +1,9 @@
 /**
- * Endless Treasury - Service Worker
+ * Endless Treasure - Service Worker
  * Enables 100% offline access and fast local loading.
  */
 
-const CACHE_NAME = 'endless-treasury-v3';
+const CACHE_NAME = 'endless-treasury-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="description" content="Endless Treasure: An interactive, continuous Scripture audio-reading and cross-reference journey through the King James Bible.">
+  <meta name="description" content="Endless Treasure: An interactive, continuous Scripture audio-reading and cross-reference journey through the King James Version and Berean Standard Bible.">
   <meta name="theme-color" content="#2B6B61">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -78,6 +78,12 @@
             <option value="johannine">Johannine Writings</option>
           </select>
           <button class="cat-reset" id="catsReset" type="button" title="Reset the scope filter to all scripture">↺ Reset</button>
+
+          <label class="cats-label" for="bible">Bible version:</label>
+          <select id="bible" class="cat-select" aria-label="Bible version">
+            <option value="kjv">King James Version (KJV)</option>
+            <option value="bsb">Berean Standard Bible (BSB)</option>
+          </select>
         </div>
 
         <p class="note" id="seedNote" aria-live="polite"></p>
@@ -102,6 +108,7 @@
           <div class="refrow">
             <div class="refrow-left">
               <span class="ref" id="refLabel"></span>
+              <span class="version-tag" id="versionTag">KJV</span>
               <span class="via" id="via"></span>
             </div>
             <div class="refrow-right">
@@ -182,7 +189,7 @@
     </main>
 
     <footer>
-      Text: King James Version (public domain). Links: the Treasury of Scripture Knowledge (R. A. Torrey, public domain), as scored in the OpenBible.info cross-reference data (CC BY 4.0). Each verse keeps its ten strongest links. Hebrew and Greek word tagging: STEPBible Tagged texts (CC BY 4.0, STEP Bible / Tyndale House). Word definitions: Strong's dictionary via Open Scriptures (CC BY-SA). Where the Hebrew and English verse numbers differ, the English (KJV) number is used. Voice is your browser's built-in text-to-speech.
+      Text: King James Version (KJV) and Berean Standard Bible (BSB), both public domain. Links: the Treasury of Scripture Knowledge (R. A. Torrey, public domain), as scored in the OpenBible.info cross-reference data (CC BY 4.0). Each verse keeps its ten strongest links. Hebrew and Greek word tagging: STEPBible Tagged texts (CC BY 4.0, STEP Bible / Tyndale House). Word definitions: Strong's dictionary via Open Scriptures (CC BY-SA). Where the Hebrew and English verse numbers differ, the English (KJV) number is used. Voice is your browser's built-in text-to-speech.
     </footer>
   </div>
 

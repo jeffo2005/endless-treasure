@@ -2,7 +2,7 @@
 
 > **Infinite Scripture Audio & Cross-Reference Explorer**
 
-Endless Treasure is an interactive, continuous Scripture listening and non-linear exploration application. Starting from any verse or topical theme, it continuously journeys through the King James Bible by following the cross-reference pathways of the **Treasury of Scripture Knowledge (TSK)**, reading each verse aloud using your browser's native Text-to-Speech engine.
+Endless Treasure is an interactive, continuous Scripture listening and non-linear exploration application. Starting from any verse or topical theme, it continuously journeys through Scripture by following the cross-reference pathways of the **Treasury of Scripture Knowledge (TSK)**, reading each verse aloud using your browser's native Text-to-Speech engine. Choose the **King James Version (KJV)** or the **Berean Standard Bible (BSB)** at any time, including mid-journey.
 
 ---
 
@@ -12,6 +12,7 @@ Endless Treasure is an interactive, continuous Scripture listening and non-linea
 - **Mobile Background Audio & Lock Screen**: Plays through an HTML5 `<audio>` pipeline so audio keeps streaming on mobile Safari when the phone is locked or browser is exited, complete with lock screen controls via the `MediaSession` API.
 - **Offline Fallback**: Seamlessly falls back to local device voices if offline.
 - **Continuous Scripture Stream**: Plays verses continuously, deciding whether to read consecutive verses or jump across cross-references based on your chosen settings.
+- **KJV or Berean Standard Bible**: Both texts are public domain and verse-index aligned, so you can switch translations before or during a journey without losing your place. The BSB is loaded on demand and cached for offline use.
 - **Personalized PageRank (PPR)**: Uses graph search and personalized PageRank to keep the listening journey anchored tightly or loosely around your chosen theme or starting verse.
 - **Original Hebrew & Greek Word Studies**: Explore the Strong's concordance root words behind English terms (e.g. *love*, *grace*, *forgiveness*), chaining occurrences in biblical or shuffled order.
 - **Native Browser Text-to-Speech**: Uses the Web Speech API with automatic voice detection and fallback to timed reading when silent.
@@ -39,7 +40,10 @@ endless-treasury/
 │   └── style.css            # Stylesheet (CSS variables, layout, light & dark theme)
 ├── js/
 │   ├── data.js              # Full KJV text, TSK graph, and Strong's lexicon
+│   ├── bsb-data.js          # Berean Standard Bible text, index-aligned with data.js
 │   └── app.js               # Application logic, audio engine, search & PageRank walk
+├── tools/
+│   └── build-bsb.js         # Regenerates js/bsb-data.js from the public-domain BSB text
 ├── icons/
 │   └── icon.svg             # Vector app icon
 ├── manifest.webmanifest     # PWA manifest for desktop/mobile installation
@@ -88,7 +92,7 @@ Because the project is completely static, you can deploy it to any static hostin
 
 ## Credits & Public Domain Sources
 
-- **Text**: King James Version (public domain).
+- **Text**: King James Version and Berean Standard Bible (both public domain). The BSB source and checksum are recorded in the generated `js/bsb-data.js`; regenerate it with `node tools/build-bsb.js`.
 - **Cross-References**: The *Treasury of Scripture Knowledge* (R. A. Torrey, public domain), scored in the OpenBible.info cross-reference dataset (CC BY 4.0).
 - **Hebrew & Greek Tagging**: STEPBible Tagged texts (CC BY 4.0, STEP Bible / Tyndale House).
 - **Word Definitions**: Strong's Dictionary via Open Scriptures (CC BY-SA).

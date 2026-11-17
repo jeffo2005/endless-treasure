@@ -1,7 +1,7 @@
 {
-  "name": "Endless Treasury",
-  "short_name": "Endless Treasury",
-  "description": "Continuous Scripture listening and cross-reference journey through the King James Bible.",
+  "name": "Endless Treasure",
+  "short_name": "Endless Treasure",
+  "description": "Continuous Scripture listening and cross-reference journey through the King James Version and Berean Standard Bible.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#ECEFED",

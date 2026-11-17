@@ -301,6 +301,21 @@ input[type="text"]::placeholder {
   letter-spacing: 0.02em;
 }
 
+.version-tag {
+  font: 500 0.66rem var(--f-mono);
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 7px;
+  align-self: center;
+}
+
+.omitted {
+  color: var(--muted);
+  font-style: italic;
+}
+
 .via {
   font-size: 0.85rem;
   color: var(--muted);

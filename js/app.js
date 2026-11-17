@@ -1,8 +1,8 @@
 ﻿/**
- * Endless Treasury - Core Application Logic
+ * Endless Treasure - Core Application Logic
  *
  * Implements:
- * - KJV scripture traversal and verse reference parsing
+ * - KJV/BSB scripture traversal and verse reference parsing
  * - Inverted full-text topic search with stemming and IDF weighting
  * - Personalized PageRank (PPR) over the Treasury of Scripture Knowledge (TSK) graph
  * - Strong's concordance original language word studies
@@ -15,7 +15,7 @@
 
   // 1. Verify Data Dependencies
   if (typeof window.G === 'undefined' || typeof window.SW === 'undefined') {
-    console.error('Endless Treasury: Required data (G or SW) is not loaded.');
+    console.error('Endless Treasure: Required data (G or SW) is not loaded.');
     const note = document.getElementById('seedNote');
     if (note) {
       note.textContent = 'Error: Bible data could not be loaded. Please ensure data.js is loaded.';
@@ -26,6 +26,19 @@
   const G = window.G;
   const SW = window.SW;
   const BOOKS = G.books, CH = G.chap, TEXT = G.text, ADJ = G.adj;
+
+  // Reading translation. The journey engine (TEXT, TSK graph, Strong's,
+  // scope filters) always stays on the KJV verse index; VTEXT is only what we
+  // display and read aloud. Swapping translations never moves the verse index.
+  let VTEXT = TEXT;
+  let BIBLE = 'kjv';
+  let BSB = null;
+  let bibleLoad = null;
+  let bibleChoice = 0;
+  const BIBLES = {
+    kjv: { short: 'KJV', name: 'King James Version', album: 'King James Bible' },
+    bsb: { short: 'BSB', name: 'Berean Standard Bible', album: 'Berean Standard Bible' }
+  };
 
   // Chapter verse offsets and lookup index
   const chapStart = new Int32Array(CH.length);
@@ -526,6 +539,122 @@
     try { return localStorage.getItem('et_' + k); } catch (e) { return null; }
   }
 
+  /* ---------- Bible Version (KJV / BSB) ---------- */
+  // The BSB is public domain and lives in its own lazily loaded data file so
+  // KJV-only visitors never pay for it. The generated array is index-aligned
+  // with G.text, so the TSK graph, Strong's data and scope filters are shared.
+  function loadBSB() {
+    if (BSB) return Promise.resolve(BSB);
+    if (bibleLoad) return bibleLoad;
+    bibleLoad = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'js/bsb-data.js';
+      s.async = true;
+      s.onload = () => {
+        const data = window.BSB;
+        if (!data || !Array.isArray(data.text) || data.text.length !== TEXT.length) {
+          bibleLoad = null;
+          reject(new Error('BSB data is incomplete'));
+          return;
+        }
+        BSB = data;
+        resolve(data);
+      };
+      s.onerror = () => {
+        bibleLoad = null;
+        reject(new Error('BSB script failed to load'));
+      };
+      document.head.appendChild(s);
+    });
+    return bibleLoad;
+  }
+
+  function syncBibleUi() {
+    const sel = $('bible');
+    if (sel && sel.value !== BIBLE) sel.value = BIBLE;
+    const tag = $('versionTag');
+    if (tag) tag.textContent = BIBLES[BIBLE].short;
+    document.documentElement.dataset.bible = BIBLE;
+  }
+
+  function stepIsOmitted(step) {
+    if (!step || BIBLE !== 'bsb') return false;
+    for (let k = 0; k < step.n; k++) {
+      if ((VTEXT[step.i + k] || '').trim()) return false;
+    }
+    return true;
+  }
+
+  function announceOmitted(step) {
+    $('seedNote').innerHTML = esc(refOf(step.i, step.n)) + ' is not included in the Berean Standard Bible.' +
+      ' <button class="wchip" type="button" data-omitted-next="1">Continue to next verse</button>';
+  }
+
+  function resumeAfterOmitted() {
+    omittedStep = null;
+    const nx = advance();
+    $('seedNote').textContent = '';
+    go(nx);
+  }
+
+  function refreshBibleText() {
+    if (VP) showVersePreview(VP);
+    // A Strong's word picker is tied to KJV wording; the BSB preview is plain.
+    if ($('words').dataset.mode === 'verse') clearPickerContext();
+    const wasOmitted = omittedStep;
+    omittedStep = null;
+    if (running) { go(cur); return; }
+    show(cur);
+    if (wasOmitted) {
+      if (stepIsOmitted(cur)) {
+        omittedStep = cur;
+        announceOmitted(cur);
+      } else {
+        $('seedNote').textContent = '';
+      }
+    }
+  }
+
+  function setBible(id) {
+    if (!BIBLES[id]) id = 'kjv';
+    BIBLE = id;
+    VTEXT = id === 'bsb' ? BSB.text : TEXT;
+    store('bible', id);
+    syncBibleUi();
+    refreshBibleText();
+  }
+
+  async function chooseBible(id) {
+    if (!BIBLES[id]) id = 'kjv';
+    const seq = ++bibleChoice;
+    if (id === BIBLE) { syncBibleUi(); return; }
+    const sel = $('bible');
+    if (id === 'bsb' && !BSB) {
+      if (sel) sel.disabled = true;
+      const prevNote = $('seedNote').innerHTML;
+      const loading = 'Loading the Berean Standard Bible…';
+      $('seedNote').textContent = loading;
+      try {
+        await loadBSB();
+      } catch (e) {
+        if (seq !== bibleChoice) return;
+        if (sel) { sel.value = BIBLE; sel.disabled = false; }
+        $('seedNote').textContent = 'The Berean Standard Bible could not be loaded. Check your connection and try again; the King James Version is still available.';
+        return;
+      }
+      if (sel) sel.disabled = false;
+      if (seq !== bibleChoice) {
+        if ($('seedNote').textContent === loading) $('seedNote').innerHTML = prevNote;
+        syncBibleUi();
+        return;
+      }
+      if ($('seedNote').textContent === loading) {
+        $('seedNote').innerHTML = prevNote;
+      }
+    }
+    setBible(id);
+  }
+
   function loadVoices() {
     const sel = $('voice');
     if (!sel) return;
@@ -745,7 +874,13 @@
 
     function stepText(step) {
       const verses = [];
-      for (let k = 0; k < step.n; k++) verses.push(TEXT[step.i + k]);
+      for (let k = 0; k < step.n; k++) {
+        const t = VTEXT[step.i + k];
+        if (t && t.trim()) verses.push(t);
+      }
+      // The BSB omits a handful of verses on manuscript grounds. Signal that
+      // to enqueue() rather than speaking an empty reference-only segment.
+      if (!verses.length) return '';
       return ($('announce').checked ? spokenRef(step.i, step.n) + '. ' : '') + verses.join(' ');
     }
 
@@ -758,6 +893,13 @@
       const said = stepText(step);
       const cloud = $('voice').value === 'cloud:google';
       let segmentCount = 0;
+      if (!said) {
+        // Every verse in this step is omitted by the BSB. Queue a marker so
+        // playback pauses with a notice instead of silently running on.
+        queue.push({ kind: 'omitted', step });
+        diag('verse.omitted', { ref: refOf(step.i, step.n), bible: BIBLE });
+        return;
+      }
       if (!soundOn()) {
         queue.push({ kind: 'tick', ms: (1400 + said.split(/\s+/).length * 330) / rate(), step });
         segmentCount = 1;
@@ -874,6 +1016,15 @@
         enqueue(advance());
       }
 
+      if (it.kind === 'omitted') {
+        // Pause rather than silently skipping; the notice offers a Continue
+        // button and the Play button resumes at the following verse.
+        pause();
+        omittedStep = it.step;
+        announceOmitted(it.step);
+        return;
+      }
+
       if (it.kind === 'gap' && !it.url) it.url = soundOn() ? silenceUrl(it.ms) : '';
 
       if (it.url) {
@@ -911,8 +1062,8 @@
           try {
             navigator.mediaSession.metadata = new MediaMetadata({
               title: refOf(it.step.i, it.step.n),
-              artist: 'Endless Treasury',
-              album: 'King James Bible',
+              artist: 'Endless Treasure',
+              album: BIBLES[BIBLE].album,
               artwork: [{ src: 'icons/icon.svg', sizes: '192x192', type: 'image/svg+xml' }]
             });
             // Position state for lock screen scrubber
@@ -1025,7 +1176,7 @@
   })();
 
   /* ---------- State & UI Rendering ---------- */
-  let cur = { i: 0, n: 1, via: 'seed' }, running = false, token = 0;
+  let cur = { i: 0, n: 1, via: 'seed' }, running = false, token = 0, omittedStep = null;
   const trail = [];
   let PL = null;
   let A = null, S = { step: 0, last: new Map() };
@@ -1235,7 +1386,7 @@
     }
     ol.innerHTML = trail.map((s, k) =>
       '<li><button type="button" data-k="' + k + '"><span class="g" aria-hidden="true">' + GLYPH[s.via] + '</span><span class="r">' + esc(refOf(s.i, s.n)) +
-      '</span><span class="t">' + esc(TEXT[s.i]) + '</span></button></li>').join('');
+      '</span><span class="t">' + esc(VTEXT[s.i] || 'Not included in the BSB') + '</span></button></li>').join('');
   }
 
   function renderNext() {
@@ -1262,6 +1413,7 @@
   }
 
   function show(step) {
+    if (omittedStep && omittedStep !== step) omittedStep = null;
     cur = step;
     if (!step.shown) {
       step.shown = true;
@@ -1280,7 +1432,9 @@
 
     let h = '';
     for (let k = 0; k < step.n; k++) {
-      h += (step.n > 1 ? '<sup>' + (i2v(step.i + k)) + '</sup>' : '') + esc(TEXT[step.i + k]) + ' ';
+      const t = VTEXT[step.i + k];
+      h += (step.n > 1 ? '<sup>' + (i2v(step.i + k)) + '</sup>' : '') +
+        (t ? esc(t) : '<span class="omitted">This verse is not included in the Berean Standard Bible.</span>') + ' ';
     }
     $('verseText').innerHTML = h;
     renderNext();
@@ -1404,11 +1558,22 @@
     const box = $('versePreview');
     box.hidden = false;
     $('vpRef').textContent = r.label;
+    const plain = BIBLE === 'bsb';
     let h = '';
     for (let k = 0; k < r.n; k++) {
       const v = r.i + k;
       if (r.n > 1) h += '<span class="vpv">' + i2v(v) + '</span>';
-      for (const w of TEXT[v].split(' ')) {
+      const t = VTEXT[v];
+      if (!t) {
+        h += '<span class="omitted">Not included in the Berean Standard Bible.</span> ';
+        continue;
+      }
+      if (plain) {
+        // Strong's tagging is KJV-only, so the BSB preview is plain text.
+        h += esc(t) + ' ';
+        continue;
+      }
+      for (const w of t.split(' ')) {
         const clean = w.toLowerCase().replace(/[^a-z]/g, '');
         if (!clean || STOP.has(clean)) { h += esc(w) + ' '; continue; }
         h += '<button class="vpword" type="button" data-v="' + v + '" data-w="' + esc(w) + '" title="Seed the journey with this word">' + esc(w) + '</button> ';
@@ -1507,20 +1672,28 @@
         return;
       }
       showVersePreview(r);
-      note.textContent = 'Choose a word below to seed the journey with, or use the whole verse.';
+      note.textContent = BIBLE === 'bsb'
+        ? (stepIsOmitted(r)
+          ? 'This verse is not included in the Berean Standard Bible. Choose another verse or switch to the King James Version.'
+          : 'Use this verse as the seed, or switch to the King James Version to study its original words.')
+        : 'Choose a word below to seed the journey with, or use the whole verse.';
       return;
     }
     const res = searchTopic(q);
     if (!res.ids.length) {
       const sug = suggestTerms(q);
       if (sug.length) {
-        note.innerHTML = 'No verses matched "' + esc(q) + '". The King James wording may differ.' +
+        note.innerHTML = 'No verses matched "' + esc(q) + '". ' + (BIBLE === 'bsb'
+          ? 'Topic search uses King James wording, which may differ from the BSB.'
+          : 'The King James wording may differ.') +
           '<div class="wlist" style="margin-top:6px">' +
           sug.map(w => '<button class="wchip" type="button" data-sug="' + esc(w) + '">' + esc(w) + '</button>').join('') +
           '</div>';
         return;
       }
-      note.textContent = 'No verses matched "' + q + '". The King James wording may differ, so try another word or a reference such as John 3:16.';
+      note.textContent = BIBLE === 'bsb'
+        ? 'No verses matched "' + q + '". Topic search uses King James wording, so try another word or a reference such as John 3:16.'
+        : 'No verses matched "' + q + '". The King James wording may differ, so try another word or a reference such as John 3:16.';
       return;
     }
     setAnchor(anchorFromTopic(res));
@@ -1544,9 +1717,11 @@
     const ref = refOf(cur.i, cur.n);
     let text = '';
     for (let k = 0; k < cur.n; k++) {
-      text += (cur.n > 1 ? '[' + i2v(cur.i + k) + '] ' : '') + TEXT[cur.i + k] + ' ';
+      const t = VTEXT[cur.i + k];
+      text += (cur.n > 1 ? '[' + i2v(cur.i + k) + '] ' : '') +
+        (t || (BIBLE === 'bsb' ? '[not included in the BSB]' : '')) + ' ';
     }
-    const clipText = ref + ' — ' + text.trim();
+    const clipText = ref + ' (' + BIBLES[BIBLE].short + ') — ' + text.trim();
     navigator.clipboard.writeText(clipText).then(() => {
       const btn = $('copyVerseBtn');
       if (btn) {
@@ -1609,12 +1784,13 @@
 
   $('play').addEventListener('click', () => {
     if (running) pause();
+    else if (omittedStep && omittedStep === cur) resumeAfterOmitted();
     else go(cur);
   });
 
   $('copyPlaybackDiagnostics').addEventListener('click', async () => {
     const report = [
-      'Endless Treasury playback diagnostics',
+      'Endless Treasure playback diagnostics',
       JSON.stringify(diagEnvironment(), null, 2),
       ...diagEvents.map(x => `${x.time} ${x.name}${x.detail ? ' ' + x.detail : ''}`)
     ].join('\n');
@@ -1628,7 +1804,9 @@
   });
 
   $('skip').addEventListener('click', () => {
+    const wasOmitted = omittedStep && omittedStep === cur;
     const nx = advance();
+    if (wasOmitted) $('seedNote').textContent = '';
     if (running) go(nx);
     else show(nx);
   });
@@ -1653,6 +1831,10 @@
   });
 
   $('seedNote').addEventListener('click', e => {
+    if (e.target.closest('[data-omitted-next]')) {
+      resumeAfterOmitted();
+      return;
+    }
     const c = e.target.closest('.wchip[data-catsug]');
     if (c) {
       setCat(c.dataset.catsug);
@@ -1674,6 +1856,10 @@
 
   $('cats').addEventListener('change', e => {
     setCat(e.target.value);
+  });
+
+  $('bible').addEventListener('change', e => {
+    chooseBible(e.target.value);
   });
 
   // ↺ Reset — clear the whole scope filter: back to All, every chip re-enabled,
@@ -1721,6 +1907,10 @@
   // Restore saved scripture scope (silent — no note on load)
   setCat(CAT, true);
 
+  // Restore saved Bible version (KJV is the default)
+  syncBibleUi();
+  if (load('bible') === 'bsb') chooseBible('bsb');
+
   // Sliders and Dials
   const dials = [
     ['jump', v => v < 20 ? 'mostly reads on' : v > 80 ? 'hops nearly every verse' : v + '%'],
@@ -1758,7 +1948,11 @@
   // MediaSession Handlers
   if ('mediaSession' in navigator) {
     try {
-      navigator.mediaSession.setActionHandler('play', () => { if (!running) go(cur); });
+      navigator.mediaSession.setActionHandler('play', () => {
+        if (running) return;
+        if (omittedStep && omittedStep === cur) resumeAfterOmitted();
+        else go(cur);
+      });
       navigator.mediaSession.setActionHandler('pause', pause);
       navigator.mediaSession.setActionHandler('nexttrack', () => $('skip').click());
     } catch (e) {}
