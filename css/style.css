@@ -706,6 +706,30 @@ h2 {
   color: var(--muted);
 }
 
+.vp-switch {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  padding: 1px 3px;
+  margin: 0 0 0 2px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.vp-switch:hover {
+  text-decoration-thickness: 2px;
+}
+
+.note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .wlist {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));

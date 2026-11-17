@@ -587,7 +587,10 @@
 
   function announceOmitted(step) {
     $('seedNote').innerHTML = esc(refOf(step.i, step.n)) + ' is not included in the Berean Standard Bible.' +
-      ' <button class="wchip" type="button" data-omitted-next="1">Continue to next verse</button>';
+      '<span class="note-actions">' +
+      '<button class="wchip" type="button" data-omitted-next="1">Continue to next verse</button>' +
+      '<button class="wchip" type="button" data-omitted-kjv="1">Read in KJV</button>' +
+      '</span>';
   }
 
   function resumeAfterOmitted() {
@@ -595,6 +598,24 @@
     const nx = advance();
     $('seedNote').textContent = '';
     go(nx);
+  }
+
+  async function switchPreviewToKjv() {
+    const label = VP ? VP.label : refOf(cur.i, cur.n);
+    await chooseBible('kjv');
+    $('seedNote').textContent = 'King James Version selected for ' + label + '. Choose a word to study its root.';
+    const first = document.querySelector('#vpText .vpword');
+    if (first) first.focus();
+    else $('vpWholeVerse').focus();
+  }
+
+  async function readOmittedInKjv() {
+    const step = omittedStep || cur;
+    if (!step) return;
+    await chooseBible('kjv');
+    $('seedNote').textContent = 'King James Version selected. Reading ' + refOf(step.i, step.n) + '.';
+    if (!running) go(step);
+    $('play').focus();
   }
 
   function refreshBibleText() {
@@ -1558,7 +1579,13 @@
     box.hidden = false;
     $('vpRef').textContent = r.label;
     const plain = BIBLE === 'bsb';
-    $('vpHint').hidden = !plain;
+    const hint = $('vpHint');
+    hint.hidden = !plain;
+    if (plain) {
+      $('vpHintText').textContent = stepIsOmitted(r)
+        ? 'This verse is available in the King James Version.'
+        : 'Root words are available in the King James Version.';
+    }
     let h = '';
     for (let k = 0; k < r.n; k++) {
       const v = r.i + k;
@@ -1674,7 +1701,7 @@
       showVersePreview(r);
       note.textContent = BIBLE === 'bsb'
         ? (stepIsOmitted(r)
-          ? 'This verse is not included in the Berean Standard Bible. Choose another verse or switch to the King James Version.'
+          ? 'This verse is not included in the Berean Standard Bible.'
           : 'Berean Standard Bible preview.')
         : 'Choose a word below to seed the journey with, or use the whole verse.';
       return;
@@ -1760,6 +1787,8 @@
     start($('q').value);
   });
 
+  $('vpSwitchKjv').addEventListener('click', switchPreviewToKjv);
+
   $('vpWholeVerse').addEventListener('click', () => {
     if (!VP) return;
     setAnchor(anchorFromRef(VP.i, VP.n, false));
@@ -1833,6 +1862,10 @@
   $('seedNote').addEventListener('click', e => {
     if (e.target.closest('[data-omitted-next]')) {
       resumeAfterOmitted();
+      return;
+    }
+    if (e.target.closest('[data-omitted-kjv]')) {
+      readOmittedInKjv();
       return;
     }
     const c = e.target.closest('.wchip[data-catsug]');
