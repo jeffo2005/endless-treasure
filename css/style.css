@@ -699,6 +699,13 @@ h2 {
   margin-right: 4px;
 }
 
+.vp-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 .wlist {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));

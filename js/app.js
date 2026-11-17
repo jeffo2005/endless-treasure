@@ -619,7 +619,6 @@
     if (!BIBLES[id]) id = 'kjv';
     BIBLE = id;
     VTEXT = id === 'bsb' ? BSB.text : TEXT;
-    store('bible', id);
     syncBibleUi();
     refreshBibleText();
   }
@@ -1559,6 +1558,7 @@
     box.hidden = false;
     $('vpRef').textContent = r.label;
     const plain = BIBLE === 'bsb';
+    $('vpHint').hidden = !plain;
     let h = '';
     for (let k = 0; k < r.n; k++) {
       const v = r.i + k;
@@ -1675,7 +1675,7 @@
       note.textContent = BIBLE === 'bsb'
         ? (stepIsOmitted(r)
           ? 'This verse is not included in the Berean Standard Bible. Choose another verse or switch to the King James Version.'
-          : 'Use this verse as the seed, or switch to the King James Version to study its original words.')
+          : 'Berean Standard Bible preview.')
         : 'Choose a word below to seed the journey with, or use the whole verse.';
       return;
     }
@@ -1907,9 +1907,8 @@
   // Restore saved scripture scope (silent — no note on load)
   setCat(CAT, true);
 
-  // Restore saved Bible version (KJV is the default)
+  // Every session starts in the KJV so root-word study is immediately available.
   syncBibleUi();
-  if (load('bible') === 'bsb') chooseBible('bsb');
 
   // Sliders and Dials
   const dials = [

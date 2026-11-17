@@ -12,7 +12,7 @@ Endless Treasure is an interactive, continuous Scripture listening and non-linea
 - **Mobile Background Audio & Lock Screen**: Plays through an HTML5 `<audio>` pipeline so audio keeps streaming on mobile Safari when the phone is locked or browser is exited, complete with lock screen controls via the `MediaSession` API.
 - **Offline Fallback**: Seamlessly falls back to local device voices if offline.
 - **Continuous Scripture Stream**: Plays verses continuously, deciding whether to read consecutive verses or jump across cross-references based on your chosen settings.
-- **KJV or Berean Standard Bible**: Both texts are public domain and verse-index aligned, so you can switch translations before or during a journey without losing your place. The BSB is loaded on demand and cached for offline use.
+- **KJV or Berean Standard Bible**: Both texts are public domain and verse-index aligned, so you can switch translations before or during a journey without losing your place. Each visit starts in the KJV so original Hebrew/Greek root-word study is immediately available; in BSB mode the verse preview notes that root words require the KJV. The BSB is loaded on demand and cached for offline use.
 - **Personalized PageRank (PPR)**: Uses graph search and personalized PageRank to keep the listening journey anchored tightly or loosely around your chosen theme or starting verse.
 - **Original Hebrew & Greek Word Studies**: Explore the Strong's concordance root words behind English terms (e.g. *love*, *grace*, *forgiveness*), chaining occurrences in biblical or shuffled order.
 - **Native Browser Text-to-Speech**: Uses the Web Speech API with automatic voice detection and fallback to timed reading when silent.
