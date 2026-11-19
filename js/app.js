@@ -1530,6 +1530,7 @@
     if (dock.hidden === visible) {
       dock.hidden = !visible;
       document.body.classList.toggle('float-dock-visible', visible);
+      if (!visible) setSheet(false);
     }
   }
 
@@ -1905,6 +1906,30 @@
   if ($('floatPlay')) $('floatPlay').addEventListener('click', togglePlayback);
   if ($('floatNext')) $('floatNext').addEventListener('click', nextVerse);
 
+  // Dock settings sheet: speed and pause reachable without scrolling back to the dials.
+  function setSheet(open) {
+    const sheet = $('floatSheet'), more = $('floatMore');
+    if (!sheet || !more) return;
+    sheet.hidden = !open;
+    more.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+      const first = sheet.querySelector('input[type="range"]');
+      if (first) first.focus();
+    }
+  }
+  if ($('floatMore')) {
+    $('floatMore').addEventListener('click', () => setSheet($('floatSheet').hidden));
+  }
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !$('floatSheet') || $('floatSheet').hidden) return;
+    setSheet(false);
+    $('floatMore').focus();
+  });
+  document.addEventListener('pointerdown', e => {
+    if (!$('floatSheet') || $('floatSheet').hidden) return;
+    if (!$('floatDock').contains(e.target)) setSheet(false);
+  });
+
   $('nextList').addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b) return;
@@ -2025,6 +2050,21 @@
     };
     el.addEventListener('input', upd);
     upd();
+  }
+
+  // The dock sheet mirrors the in-flow playback dials; the in-flow ones stay canonical.
+  for (const id of ['rate', 'gap']) {
+    const src = $(id), mirror = $(id + 'Dock'), mirrorOut = $(id + 'DockOut');
+    if (!src || !mirror) continue;
+    const fmt = dials.find(d => d[0] === id)[1];
+    const paint = () => { if (mirrorOut) mirrorOut.textContent = fmt(+mirror.value); };
+    mirror.value = src.value;
+    paint();
+    src.addEventListener('input', () => { mirror.value = src.value; paint(); });
+    mirror.addEventListener('input', () => {
+      src.value = mirror.value;
+      src.dispatchEvent(new Event('input'));   // reuse the in-flow handler: repaint + store
+    });
   }
 
   // Keyboard Shortcuts

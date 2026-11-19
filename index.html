@@ -55,35 +55,54 @@
           <button class="chip" type="button">Isaiah 53</button>
         </div>
 
-        <!-- Scripture Scope Filter -->
-        <div class="cats-row" role="group" aria-label="Scripture scope">
-          <label class="cats-label" for="cats" id="catsLabel">Scripture scope:</label>
-          <select id="cats" class="cat-select" aria-label="Scripture scope">
-            <option value="all">The Whole Bible</option>
-            <option value="ot">The Old Testament</option>
-            <option value="nt">The New Testament</option>
-            <option value="" disabled>──────────────</option>
-            <option value="pentateuch">Pentateuch</option>
-            <option value="historical">Historical Books</option>
-            <option value="poetical">Poetical Books</option>
-            <option value="wisdom">Wisdom Literature</option>
-            <option value="prophets">Prophets</option>
-            <option value="major">Major Prophets</option>
-            <option value="minor">Minor Prophets</option>
-            <option value="" disabled>──────────────</option>
-            <option value="gospels">The Gospels</option>
-            <option value="lukeacts">Luke-Acts</option>
-            <option value="pauline">Pauline Epistles</option>
-            <option value="general">General Epistles</option>
-            <option value="johannine">Johannine Writings</option>
-          </select>
-          <button class="cat-reset" id="catsReset" type="button" title="Reset the scope filter to all scripture">↺ Reset</button>
+        <!-- Walk setup: scope, version, and pacing set the stage for the journey -->
+        <div class="setup">
+          <div class="setup-head" id="setupHead">
+            <span id="setupTitle">Walk setup</span>
+            <button class="cat-reset" id="catsReset" type="button" title="Reset the scope filter to all scripture">↺ Reset scope</button>
+          </div>
 
-          <label class="cats-label" for="bible">Bible version:</label>
-          <select id="bible" class="cat-select" aria-label="Bible version">
-            <option value="kjv">King James Version (KJV)</option>
-            <option value="bsb">Berean Standard Bible (BSB)</option>
-          </select>
+          <div class="cats-row" role="group" aria-label="Scripture scope">
+            <label class="cats-label" for="cats" id="catsLabel">Scripture scope:</label>
+            <select id="cats" class="cat-select" aria-label="Scripture scope">
+              <option value="all">The Whole Bible</option>
+              <option value="ot">The Old Testament</option>
+              <option value="nt">The New Testament</option>
+              <option value="" disabled>──────────────</option>
+              <option value="pentateuch">Pentateuch</option>
+              <option value="historical">Historical Books</option>
+              <option value="poetical">Poetical Books</option>
+              <option value="wisdom">Wisdom Literature</option>
+              <option value="prophets">Prophets</option>
+              <option value="major">Major Prophets</option>
+              <option value="minor">Minor Prophets</option>
+              <option value="" disabled>──────────────</option>
+              <option value="gospels">The Gospels</option>
+              <option value="lukeacts">Luke-Acts</option>
+              <option value="pauline">Pauline Epistles</option>
+              <option value="general">General Epistles</option>
+              <option value="johannine">Johannine Writings</option>
+            </select>
+
+            <label class="cats-label" for="bible">Bible version:</label>
+            <select id="bible" class="cat-select" aria-label="Bible version">
+              <option value="kjv">King James Version (KJV)</option>
+              <option value="bsb">Berean Standard Bible (BSB)</option>
+            </select>
+          </div>
+
+          <div class="dials walk" role="group" aria-labelledby="setupTitle">
+            <div class="dial">
+              <div class="row"><label for="jump">Jumpiness</label><output id="jumpOut" for="jump"></output></div>
+              <input type="range" id="jump" min="0" max="100" value="55">
+              <div class="hint"><span>Reads on</span><span>Hops every verse</span></div>
+            </div>
+            <div class="dial">
+              <div class="row"><label for="focus">Focus</label><output id="focusOut" for="focus"></output></div>
+              <input type="range" id="focus" min="0" max="100" value="15">
+              <div class="hint"><span>Tight on topic</span><span>Looser</span></div>
+            </div>
+          </div>
         </div>
 
         <p class="note" id="seedNote" aria-live="polite"></p>
@@ -130,28 +149,30 @@
 
         <!-- Floating phone transport: shown only when the in-flow controls are off-screen -->
         <div class="float-dock" id="floatDock" hidden role="group" aria-label="Floating playback controls">
+          <!-- Playback settings sheet: speed and pause without scrolling back to the dials -->
+          <div class="float-sheet" id="floatSheet" hidden role="group" aria-label="Playback settings">
+            <div class="fs-dial">
+              <div class="row"><label for="rateDock">Speed</label><output id="rateDockOut" for="rateDock"></output></div>
+              <input type="range" id="rateDock" min="70" max="140" value="92">
+            </div>
+            <div class="fs-dial">
+              <div class="row"><label for="gapDock">Pause between verses</label><output id="gapDockOut" for="gapDock"></output></div>
+              <input type="range" id="gapDock" min="0" max="3000" step="100" value="700">
+            </div>
+          </div>
           <span class="float-meta">
             <span class="float-ref" id="floatRef"></span>
             <span class="float-status" id="floatStatus"></span>
           </span>
           <span class="float-actions">
+            <button class="btn dock-more" id="floatMore" type="button" aria-expanded="false" aria-controls="floatSheet" aria-label="Playback settings" title="Speed and pause">⋯</button>
             <button class="btn primary" id="floatPlay" type="button" aria-label="Play scripture" aria-keyshortcuts="Space">Play</button>
             <button class="btn" id="floatNext" type="button" aria-label="Next verse" aria-keyshortcuts="ArrowRight">Next</button>
           </span>
         </div>
 
-        <!-- Pacing & PageRank Dials -->
-        <div class="dials">
-          <div class="dial">
-            <div class="row"><label for="jump">Jumpiness</label><output id="jumpOut" for="jump"></output></div>
-            <input type="range" id="jump" min="0" max="100" value="55">
-            <div class="hint"><span>Reads on</span><span>Hops every verse</span></div>
-          </div>
-          <div class="dial">
-            <div class="row"><label for="focus">Focus</label><output id="focusOut" for="focus"></output></div>
-            <input type="range" id="focus" min="0" max="100" value="15">
-            <div class="hint"><span>Tight on topic</span><span>Looser</span></div>
-          </div>
+        <!-- Playback Dials: how it sounds while it reads -->
+        <div class="dials playback">
           <div class="dial">
             <div class="row"><label for="rate">Speed</label><output id="rateOut" for="rate"></output></div>
             <input type="range" id="rate" min="70" max="140" value="92">
@@ -170,6 +191,12 @@
           <select id="voice"><option value="">Default voice</option></select>
         </div>
 
+        <!-- Outgoing Cross-References -->
+        <div class="next">
+          <h2 id="nextHead">Where it can go from here</h2>
+          <ul id="nextList"></ul>
+        </div>
+
         <details class="playback-diagnostics" id="playbackDiagnostics">
           <summary>Playback diagnostics</summary>
           <p id="playbackDiagStatus" role="status">No playback events recorded yet.</p>
@@ -178,12 +205,6 @@
           </div>
           <pre id="playbackDiagLog" aria-live="polite"></pre>
         </details>
-
-        <!-- Outgoing Cross-References -->
-        <div class="next">
-          <h2 id="nextHead">Where it can go from here</h2>
-          <ul id="nextList"></ul>
-        </div>
       </section>
 
       <!-- History Trail -->
