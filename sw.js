@@ -3,7 +3,7 @@
  * Enables 100% offline access and fast local loading.
  */
 
-const CACHE_NAME = 'endless-treasury-v8';
+const CACHE_NAME = 'endless-treasury-v9';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

@@ -121,7 +121,7 @@
     if (k == null) return { error: BOOKS[b] + ' has no chapter ' + ch + '.' };
     const v = m[5] ? Math.min(+m[5], CH[k][2]) : 1;
     const i = chapStart[k] + v - 1;
-    const n = m[6] ? Math.max(1, Math.min(3, +m[6] - v + 1)) : 1;
+    const n = m[6] ? Math.max(1, Math.min(CH[k][2] - v + 1, +m[6] - v + 1)) : 1;
     return { i, n: spanOf(i, n), label: refOf(i, n), chapterOnly: !m[5] };
   }
 
@@ -1650,6 +1650,7 @@
     const box = $('versePreview');
     box.hidden = false;
     $('vpRef').textContent = r.label;
+    $('vpWholeVerse').textContent = r.n > 1 ? 'Use this passage as seed' : 'Use this verse as seed';
     const plain = BIBLE === 'bsb';
     const hint = $('vpHint');
     hint.hidden = !plain;
@@ -1874,6 +1875,86 @@
     const b = e.target.closest('.vpword');
     if (!b) return;
     renderRootPicker(+b.dataset.v, b.dataset.w);
+  });
+
+  // ---------- Native-select Bible reference browser ----------
+  const referenceSheet = $('referenceSheet');
+  const refBook = $('refBook'), refChapter = $('refChapter');
+  const refFrom = $('refFrom'), refTo = $('refTo');
+
+  function setNumericOptions(select, values, selected) {
+    select.replaceChildren(...values.map(value => {
+      const option = document.createElement('option');
+      option.value = String(value);
+      option.textContent = String(value);
+      return option;
+    }));
+    select.value = String(selected);
+  }
+
+  function selectedChapterIndex() {
+    const book = +refBook.value, chapter = +refChapter.value;
+    return chapIdx.get(book + ':' + chapter);
+  }
+
+  function refreshReferenceSummary() {
+    const book = +refBook.value, chapter = +refChapter.value;
+    const from = +refFrom.value, to = +refTo.value;
+    const count = to - from + 1;
+    $('referenceSummary').textContent = BOOKS[book] + ' ' + chapter + ':' + from +
+      (to > from ? '–' + to : '') + ' · ' + count + (count === 1 ? ' verse' : ' verses');
+  }
+
+  function refreshReferenceVerses(from = 1, to = from) {
+    const k = selectedChapterIndex();
+    if (k == null) return;
+    const verseCount = CH[k][2];
+    from = Math.max(1, Math.min(verseCount, from));
+    to = Math.max(from, Math.min(verseCount, to));
+    const verses = Array.from({ length: verseCount }, (_, i) => i + 1);
+    setNumericOptions(refFrom, verses, from);
+    setNumericOptions(refTo, verses.slice(from - 1), to);
+    refreshReferenceSummary();
+  }
+
+  function refreshReferenceChapters(book, chapter = 1, verse = 1, endVerse = verse) {
+    const chapters = CH.filter(ch => ch[0] === book).map(ch => ch[1]);
+    setNumericOptions(refChapter, chapters, chapters.includes(chapter) ? chapter : chapters[0]);
+    refreshReferenceVerses(verse, endVerse);
+  }
+
+  function openReferenceSheet() {
+    const k = chapOf(cur.i), book = CH[k][0], chapter = CH[k][1];
+    const verse = cur.i - chapStart[k] + 1;
+    const endVerse = Math.min(CH[k][2], verse + Math.max(1, cur.n) - 1);
+    if (!refBook.options.length) {
+      BOOKS.forEach((name, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = name;
+        refBook.appendChild(option);
+      });
+    }
+    refBook.value = String(book);
+    refreshReferenceChapters(book, chapter, verse, endVerse);
+    referenceSheet.showModal();
+  }
+
+  $('browseBible').addEventListener('click', openReferenceSheet);
+  $('closeReference').addEventListener('click', () => referenceSheet.close());
+  $('cancelReference').addEventListener('click', () => referenceSheet.close());
+  referenceSheet.addEventListener('click', e => {
+    if (e.target === referenceSheet) referenceSheet.close();
+  });
+  refBook.addEventListener('change', () => refreshReferenceChapters(+refBook.value));
+  refChapter.addEventListener('change', () => refreshReferenceVerses());
+  refFrom.addEventListener('change', () => refreshReferenceVerses(+refFrom.value, +refTo.value));
+  refTo.addEventListener('change', refreshReferenceSummary);
+  $('useReference').addEventListener('click', () => {
+    const ref = $('referenceSummary').textContent.split(' · ')[0].replace('–', '-');
+    $('q').value = ref;
+    referenceSheet.close();
+    start(ref);
   });
 
   $('chips').addEventListener('click', e => {
